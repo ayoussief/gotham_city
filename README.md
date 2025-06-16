@@ -4,7 +4,7 @@ A Flutter mobile application for a decentralized Bitcoin-based job network with 
 
 ## Features
 
-### ✅ Implemented (UI Only)
+### ✅ Implemented (UI + Mini Node)
 - **🔑 Wallet Management**: Create new wallet or import existing wallet
 - **💰 Balance Display**: Shows Bitcoin balance and USD equivalent
 - **📜 Transaction History**: View recent transactions with details
@@ -12,6 +12,10 @@ A Flutter mobile application for a decentralized Bitcoin-based job network with 
 - **➕ Post Jobs**: Create new jobs with rewards
 - **🎨 Dark Theme**: Gotham City inspired dark UI with gold accents
 - **🦇 Adaptive Icon**: Circular adaptive icon using custom arkham.png
+- **🌐 Mini Bitcoin Node**: Lightweight node that syncs block headers only
+- **📊 Node Status**: Real-time blockchain and network information
+- **💾 Smart Caching**: Keeps only latest 144 blocks (~24 hours)
+- **🔄 Auto Cleanup**: Automatic cache management to keep app lightweight
 
 ### 🔄 Planned (Backend Integration)
 - **⛓ Sync Status**: Real-time blockchain synchronization
@@ -27,6 +31,7 @@ The app features:
 - **Jobs Screen**: Job listings with status indicators and details
 - **Transactions Screen**: Transaction history with confirmations
 - **Post Job Screen**: Create jobs with different types (Computation, Storage, Network, Custom)
+- **Node Status Screen**: Real-time blockchain sync, peer connections, and cache statistics
 
 ## Technical Stack
 
@@ -34,6 +39,8 @@ The app features:
 - **Backend**: C++ (planned)
 - **Blockchain**: Bitcoin with Taproot support
 - **Theme**: Custom dark theme with Gotham City aesthetics
+- **Database**: SQLite for local block header cache
+- **Networking**: HTTP RPC client for Bitcoin node communication
 
 ## Job Types
 
@@ -41,6 +48,36 @@ The app features:
 2. **Storage**: File storage and retrieval services
 3. **Network**: Network relay and routing services
 4. **Custom**: Custom algorithms and specialized tasks
+
+## Mini Bitcoin Node
+
+Gotham City includes a lightweight Bitcoin node implementation that:
+
+### 🔧 **Core Features**
+- **Header-Only Sync**: Downloads only block headers, not full blocks
+- **Smart Caching**: Keeps latest 144 blocks (~24 hours) in local SQLite database
+- **Auto Cleanup**: Automatically removes old headers every hour
+- **Real-time Updates**: Live blockchain and network statistics
+- **Peer Management**: Tracks and displays connected peers
+
+### 📊 **Node Status Screen**
+- **Connection Status**: Shows if connected to your Bitcoin fork
+- **Blockchain Info**: Current height, sync progress, difficulty
+- **Network Stats**: Peer connections, data transfer, ping times
+- **Local Cache**: Database size, cached headers count
+- **Recent Headers**: List of recently synced block headers
+
+### ⚙️ **Configuration**
+- **RPC Settings**: Configure host, port, username, password
+- **Auto Sync**: Syncs every 30 seconds when connected
+- **Batch Processing**: Downloads headers in batches of 100
+- **Error Handling**: Graceful handling of connection issues
+
+### 💾 **Storage Management**
+- **Lightweight**: Only stores essential header data
+- **Efficient**: SQLite database with optimized indexes
+- **Automatic**: No manual intervention required
+- **Scalable**: Designed to handle continuous operation
 
 ## Installation
 
@@ -70,7 +107,7 @@ flutter test
 - **Name**: Gotham City
 - **Package**: com.example.gotham_city
 - **Version**: 1.0.0+1
-- **Size**: ~21.7MB
+- **Size**: ~23.2MB
 - **Platform**: Android (iOS support planned)
 
 ## Security
