@@ -11,6 +11,7 @@ A Flutter mobile application for a decentralized Bitcoin-based job network with 
 - **💼 Job Management**: View and manage jobs with different types
 - **➕ Post Jobs**: Create new jobs with rewards
 - **🎨 Dark Theme**: Gotham City inspired dark UI with gold accents
+- **🦇 Adaptive Icon**: Circular adaptive icon using custom arkham.png
 
 ### 🔄 Planned (Backend Integration)
 - **⛓ Sync Status**: Real-time blockchain synchronization
@@ -69,7 +70,7 @@ flutter test
 - **Name**: Gotham City
 - **Package**: com.example.gotham_city
 - **Version**: 1.0.0+1
-- **Size**: ~21MB
+- **Size**: ~21.7MB
 - **Platform**: Android (iOS support planned)
 
 ## Security
