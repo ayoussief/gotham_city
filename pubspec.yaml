@@ -36,12 +36,12 @@ dependencies:
   cupertino_icons: ^1.0.8
   
   # Networking and Bitcoin node functionality
-  http: ^1.1.0
-  crypto: ^3.0.3
-  convert: ^3.1.1
-  sqflite: ^2.3.0
-  path: ^1.8.3
-  shared_preferences: ^2.2.2
+  http: ^1.2.2
+  crypto: ^3.0.6
+  convert: ^3.1.2
+  sqflite: ^2.4.1
+  path: ^1.9.1
+  shared_preferences: ^2.3.3
 
 dev_dependencies:
   flutter_test:
@@ -52,8 +52,8 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
-  flutter_launcher_icons: ^0.13.1
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
