@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/transaction.dart';
+import '../services/wallet_service.dart';
 import '../theme/app_theme.dart';
 
 class TransactionsScreen extends StatefulWidget {
@@ -11,30 +12,70 @@ class TransactionsScreen extends StatefulWidget {
 }
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
+  final WalletService _walletService = WalletService();
   List<Transaction> _transactions = [];
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadTransactions();
+    _initializeAndLoadTransactions();
   }
 
-  void _loadTransactions() {
+  Future<void> _initializeAndLoadTransactions() async {
     setState(() {
       _isLoading = true;
     });
 
-    // Mock transaction data - will be replaced with actual backend
-    Future.delayed(const Duration(seconds: 1), () {
+    try {
+      await _walletService.initialize();
+      
+      // Listen to transaction updates
+      _walletService.transactionsStream.listen((transactions) {
+        if (mounted) {
+          setState(() {
+            _transactions = transactions;
+          });
+        }
+      });
+
+      // Load initial transactions
+      await _loadTransactions();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load transactions: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadTransactions() async {
+    try {
+      final transactions = await _walletService.getTransactionHistory();
+      setState(() {
+        _transactions = transactions;
+      });
+    } catch (e) {
+      // If no wallet or error, show mock data for demo
       setState(() {
         _transactions = [
           Transaction(
-            id: '1',
-            txHash: 'abc123def456ghi789jkl012mno345pqr678stu901vwx234yz',
+            txid: 'abc123def456ghi789jkl012mno345pqr678stu901vwx234yz',
             amount: 0.001,
             type: TransactionType.jobReward,
+            status: TransactionStatus.confirmed,
             timestamp: DateTime.now().subtract(const Duration(minutes: 30)),
+            fromAddress: '',
             toAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
             confirmations: 6,
             fee: 0.00001,
@@ -42,22 +83,23 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             description: 'Reward for Data Processing Task',
           ),
           Transaction(
-            id: '2',
-            txHash: 'def456ghi789jkl012mno345pqr678stu901vwx234yz567abc',
+            txid: 'def456ghi789jkl012mno345pqr678stu901vwx234yz567abc',
             amount: 0.0005,
             type: TransactionType.jobPayment,
+            status: TransactionStatus.confirmed,
             timestamp: DateTime.now().subtract(const Duration(hours: 1)),
             fromAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
+            toAddress: '',
             confirmations: 3,
             fee: 0.00001,
             jobId: '2',
             description: 'Payment for File Storage Service',
           ),
           Transaction(
-            id: '3',
-            txHash: 'ghi789jkl012mno345pqr678stu901vwx234yz567abc123def',
+            txid: 'ghi789jkl012mno345pqr678stu901vwx234yz567abc123def',
             amount: 0.01,
             type: TransactionType.received,
+            status: TransactionStatus.confirmed,
             timestamp: DateTime.now().subtract(const Duration(hours: 2)),
             fromAddress: 'bc1qsender123456789abcdefghijklmnopqrstuvwxyz',
             toAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
@@ -66,10 +108,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             description: 'Received Bitcoin',
           ),
           Transaction(
-            id: '4',
-            txHash: 'jkl012mno345pqr678stu901vwx234yz567abc123def456ghi',
+            txid: 'jkl012mno345pqr678stu901vwx234yz567abc123def456ghi',
             amount: 0.005,
             type: TransactionType.sent,
+            status: TransactionStatus.confirmed,
             timestamp: DateTime.now().subtract(const Duration(hours: 4)),
             fromAddress: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
             toAddress: 'bc1qrecipient987654321zyxwvutsrqponmlkjihgfed',
@@ -78,9 +120,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             description: 'Sent Bitcoin',
           ),
         ];
-        _isLoading = false;
       });
-    });
+    }
+  }
+
+  Future<void> _refreshTransactions() async {
+    await _loadTransactions();
   }
 
   Color _getTransactionColor(TransactionType type) {

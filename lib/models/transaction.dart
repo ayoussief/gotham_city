@@ -6,38 +6,48 @@ enum TransactionType {
   refund,
 }
 
+enum TransactionStatus {
+  pending,
+  confirmed,
+  failed,
+}
+
 class Transaction {
-  final String id;
-  final String txHash;
+  final String txid;
   final double amount;
-  final TransactionType type;
-  final DateTime timestamp;
-  final String? fromAddress;
-  final String? toAddress;
-  final int confirmations;
   final double fee;
+  final int confirmations;
+  final DateTime timestamp;
+  final TransactionType type;
+  final TransactionStatus status;
+  final String fromAddress;
+  final String toAddress;
   final String? jobId;
   final String? description;
 
   Transaction({
-    required this.id,
-    required this.txHash,
+    required this.txid,
     required this.amount,
-    required this.type,
+    required this.fee,
+    required this.confirmations,
     required this.timestamp,
-    this.fromAddress,
-    this.toAddress,
-    this.confirmations = 0,
-    this.fee = 0.0,
+    required this.type,
+    required this.status,
+    required this.fromAddress,
+    required this.toAddress,
     this.jobId,
     this.description,
   });
 
+  // Legacy compatibility
+  String get id => txid;
+  String get txHash => txid;
+
   Transaction copyWith({
-    String? id,
-    String? txHash,
+    String? txid,
     double? amount,
     TransactionType? type,
+    TransactionStatus? status,
     DateTime? timestamp,
     String? fromAddress,
     String? toAddress,
@@ -47,10 +57,10 @@ class Transaction {
     String? description,
   }) {
     return Transaction(
-      id: id ?? this.id,
-      txHash: txHash ?? this.txHash,
+      txid: txid ?? this.txid,
       amount: amount ?? this.amount,
       type: type ?? this.type,
+      status: status ?? this.status,
       timestamp: timestamp ?? this.timestamp,
       fromAddress: fromAddress ?? this.fromAddress,
       toAddress: toAddress ?? this.toAddress,

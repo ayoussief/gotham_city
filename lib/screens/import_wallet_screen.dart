@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import '../models/wallet.dart';
+import '../services/wallet_service.dart';
 import '../theme/app_theme.dart';
 
 class ImportWalletScreen extends StatefulWidget {
-  const ImportWalletScreen({super.key});
+  final WalletService walletService;
+  
+  const ImportWalletScreen({
+    super.key,
+    required this.walletService,
+  });
 
   @override
   State<ImportWalletScreen> createState() => _ImportWalletScreenState();
@@ -23,29 +29,46 @@ class _ImportWalletScreenState extends State<ImportWalletScreen> {
     super.dispose();
   }
 
-  void _importWallet() async {
+  Future<void> _importWallet() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
     });
 
-    // Mock wallet import - will be replaced with actual backend
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      Wallet wallet;
+      
+      if (_selectedTab == 0) {
+        // Import from private key
+        wallet = await widget.walletService.importWalletFromPrivateKey(
+          _privateKeyController.text.trim(),
+        );
+      } else {
+        // Import from seed phrase
+        wallet = await widget.walletService.importWalletFromSeed(
+          _mnemonicController.text.trim(),
+        );
+      }
 
-    final wallet = Wallet(
-      address: 'bc1qimported${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-      balance: 0.00234567,
-      privateKey: _selectedTab == 0 ? _privateKeyController.text : 'derived_from_mnemonic',
-      isImported: true,
-    );
-
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (mounted) {
-      Navigator.pop(context, wallet);
+      if (mounted) {
+        Navigator.pop(context, wallet);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to import wallet: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

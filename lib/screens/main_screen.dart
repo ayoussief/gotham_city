@@ -3,7 +3,7 @@ import 'wallet_screen.dart';
 import 'jobs_screen.dart';
 import 'post_job_screen.dart';
 import 'transactions_screen.dart';
-import 'node_status_screen.dart';
+import '../bitcoin_node/screens/spv_status_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -20,7 +20,7 @@ class _MainScreenState extends State<MainScreen> {
     const JobsScreen(),
     const TransactionsScreen(),
     const PostJobScreen(),
-    const NodeStatusScreen(),
+    const SPVStatusScreen(),
   ];
 
   @override
