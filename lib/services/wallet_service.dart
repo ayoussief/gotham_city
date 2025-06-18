@@ -39,44 +39,73 @@ class WalletService {
     if (_isInitialized) return;
 
     try {
-      // Initialize SPV client and wallet backend
-      await _spvClient.initialize();
-      await _walletBackend.initialize();
+      print('WalletService: Starting initialization...');
+      
+      // Initialize SPV client and wallet backend with timeout
+      print('WalletService: Initializing SPV client...');
+      await _spvClient.initialize().timeout(const Duration(seconds: 10));
+      
+      print('WalletService: Initializing wallet backend...');
+      await _walletBackend.initialize().timeout(const Duration(seconds: 10));
       
       // Load existing wallet if any
+      print('WalletService: Loading existing wallet...');
       await _loadExistingWallet();
       
-      // Start SPV sync if we have a wallet
+      // Start SPV sync if we have a wallet (but don't wait for completion)
       if (_currentWallet != null) {
-        await _spvClient.startSync();
+        print('WalletService: Starting SPV sync (non-blocking)...');
+        _spvClient.startSync().catchError((e) {
+          print('SPV sync error (non-blocking): $e');
+        });
         _setupSyncListeners();
       }
       
       _isInitialized = true;
+      print('WalletService: Initialization completed successfully');
     } catch (e) {
+      print('WalletService: Initialization failed: $e');
       throw Exception('Failed to initialize wallet service: $e');
     }
   }
 
   Future<void> _loadExistingWallet() async {
-    final prefs = await SharedPreferences.getInstance();
-    final walletData = prefs.getString('gotham_wallet');
-    
-    if (walletData != null) {
-      try {
-        final data = jsonDecode(walletData);
-        _currentWallet = Wallet.fromJson(data);
-        
-        // Load wallet into backend
-        if (_currentWallet!.seedPhrase != null) {
-          await _walletBackend.restoreFromSeed(_currentWallet!.seedPhrase!);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final walletData = prefs.getString('gotham_wallet');
+      
+      if (walletData != null) {
+        print('WalletService: Found existing wallet data, parsing...');
+        try {
+          final data = jsonDecode(walletData);
+          _currentWallet = Wallet.fromJson(data);
+          print('WalletService: Wallet parsed successfully: ${_currentWallet!.address}');
+          
+          // Load wallet into backend with timeout
+          if (_currentWallet!.seedPhrase != null) {
+            print('WalletService: Restoring wallet from seed...');
+            await _walletBackend.restoreFromSeed(_currentWallet!.seedPhrase!)
+                .timeout(const Duration(seconds: 15));
+            print('WalletService: Wallet restored from seed');
+          }
+          
+          _walletController.add(_currentWallet);
+          print('WalletService: Wallet loaded successfully');
+          
+          // Update balance asynchronously (don't block initialization)
+          _updateBalance().catchError((e) {
+            print('WalletService: Balance update error (non-blocking): $e');
+          });
+        } catch (e) {
+          print('WalletService: Error parsing wallet data: $e');
+          // Clear corrupted wallet data
+          await prefs.remove('gotham_wallet');
         }
-        
-        _walletController.add(_currentWallet);
-        await _updateBalance();
-      } catch (e) {
-        print('Error loading existing wallet: $e');
+      } else {
+        print('WalletService: No existing wallet found');
       }
+    } catch (e) {
+      print('WalletService: Error loading existing wallet: $e');
     }
   }
 

@@ -3,7 +3,7 @@ import 'wallet_screen.dart';
 import 'jobs_screen.dart';
 import 'post_job_screen.dart';
 import 'transactions_screen.dart';
-import '../bitcoin_node/screens/spv_status_screen.dart';
+import '../bitcoin_node/screens/node_status_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -20,13 +20,16 @@ class _MainScreenState extends State<MainScreen> {
     const JobsScreen(),
     const TransactionsScreen(),
     const PostJobScreen(),
-    const SPVStatusScreen(),
+    const NodeStatusScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _screens,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {

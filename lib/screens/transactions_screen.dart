@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import '../models/transaction.dart';
 import '../services/wallet_service.dart';
 import '../theme/app_theme.dart';
@@ -15,6 +16,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   final WalletService _walletService = WalletService();
   List<Transaction> _transactions = [];
   bool _isLoading = false;
+  bool _isInitialized = false;
+  DateTime? _lastRefresh;
+  StreamSubscription? _transactionStreamSub;
 
   @override
   void initState() {
@@ -23,30 +27,38 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 
   Future<void> _initializeAndLoadTransactions() async {
+    if (_isLoading) return;
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
-      await _walletService.initialize();
-      
-      // Listen to transaction updates
-      _walletService.transactionsStream.listen((transactions) {
-        if (mounted) {
-          setState(() {
-            _transactions = transactions;
-          });
-        }
-      });
+      if (!_isInitialized) {
+        await _walletService.initialize();
+        
+        // Listen to transaction updates (store subscription for disposal)
+        _transactionStreamSub = _walletService.transactionsStream.listen((transactions) {
+          if (mounted && !_transactionsEqual(_transactions, transactions)) {
+            setState(() {
+              _transactions = transactions;
+            });
+          }
+        });
+        
+        _isInitialized = true;
+      }
 
       // Load initial transactions
       await _loadTransactions();
     } catch (e) {
+      print('Error initializing transactions: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to load transactions: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.dangerRed,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -62,13 +74,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   Future<void> _loadTransactions() async {
     try {
       final transactions = await _walletService.getTransactionHistory();
-      setState(() {
-        _transactions = transactions;
-      });
+      if (mounted && !_transactionsEqual(_transactions, transactions)) {
+        setState(() {
+          _transactions = transactions;
+        });
+      }
     } catch (e) {
       // If no wallet or error, show mock data for demo
-      setState(() {
-        _transactions = [
+      final mockTransactions = [
           Transaction(
             txid: 'abc123def456ghi789jkl012mno345pqr678stu901vwx234yz',
             amount: 0.001,
@@ -120,8 +133,27 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             description: 'Sent Bitcoin',
           ),
         ];
-      });
+      
+      if (mounted && !_transactionsEqual(_transactions, mockTransactions)) {
+        setState(() {
+          _transactions = mockTransactions;
+        });
+      }
     }
+    
+    _lastRefresh = DateTime.now();
+  }
+  
+  bool _transactionsEqual(List<Transaction> list1, List<Transaction> list2) {
+    if (list1.length != list2.length) return false;
+    for (int i = 0; i < list1.length; i++) {
+      if (list1[i].txid != list2[i].txid || 
+          list1[i].status != list2[i].status ||
+          list1[i].confirmations != list2[i].confirmations) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Future<void> _refreshTransactions() async {
@@ -157,6 +189,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
   String _getTransactionPrefix(TransactionType type) {
     return type.isIncoming ? '+' : '-';
+  }
+
+  @override
+  void dispose() {
+    _transactionStreamSub?.cancel();
+    super.dispose();
   }
 
   @override

@@ -43,6 +43,7 @@ dependencies:
   sqflite_common_ffi: ^2.3.3
   path: ^1.9.1
   shared_preferences: ^2.3.3
+  file_picker: ^8.1.6
 
 dev_dependencies:
   flutter_test:

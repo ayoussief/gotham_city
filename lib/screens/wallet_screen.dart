@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import '../models/wallet.dart';
 import '../services/wallet_service.dart';
 import '../theme/app_theme.dart';
 import 'import_wallet_screen.dart';
 import 'send_screen.dart';
 import 'receive_screen.dart';
+import 'wallet_settings_screen.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -19,6 +21,10 @@ class _WalletScreenState extends State<WalletScreen> {
   Wallet? _wallet;
   bool _isLoading = false;
   bool _isSyncing = false;
+  
+  // Stream subscriptions for proper disposal
+  StreamSubscription? _walletStreamSub;
+  StreamSubscription? _syncStatusStreamSub;
 
   @override
   void initState() {
@@ -32,36 +38,51 @@ class _WalletScreenState extends State<WalletScreen> {
     });
 
     try {
-      await _walletService.initialize();
+      print('WalletScreen: Starting wallet initialization...');
       
-      // Listen to wallet updates
-      _walletService.walletStream.listen((wallet) {
-        if (mounted) {
+      // Add timeout to prevent infinite loading
+      await _walletService.initialize()
+          .timeout(const Duration(seconds: 30));
+      
+      print('WalletScreen: Wallet service initialized');
+      
+      // Listen to wallet updates (store subscription for disposal)
+      _walletStreamSub = _walletService.walletStream.listen((wallet) {
+        if (mounted && _wallet != wallet) {
+          print('WalletScreen: Wallet update received: ${wallet?.address ?? 'null'}');
           setState(() {
             _wallet = wallet;
           });
         }
       });
 
-      // Listen to sync status
-      _walletService.syncStatusStream.listen((syncing) {
-        if (mounted) {
+      // Listen to sync status (store subscription for disposal)
+      _syncStatusStreamSub = _walletService.syncStatusStream.listen((syncing) {
+        if (mounted && _isSyncing != syncing) {
+          print('WalletScreen: Sync status update: $syncing');
           setState(() {
             _isSyncing = syncing;
           });
         }
       });
 
-      // Set initial wallet
-      setState(() {
-        _wallet = _walletService.currentWallet;
-      });
+      // Set initial wallet (only if different)
+      final currentWallet = _walletService.currentWallet;
+      if (_wallet != currentWallet) {
+        setState(() {
+          _wallet = currentWallet;
+        });
+      }
+      
+      print('WalletScreen: Initialization completed');
     } catch (e) {
+      print('WalletScreen: Initialization failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to initialize wallet: $e'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -75,21 +96,33 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Future<void> _loadWallet() async {
-    if (_walletService.currentWallet != null) {
-      try {
-        await _walletService.refreshWallet();
+    if (_isLoading || _walletService.currentWallet == null) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      await _walletService.refreshWallet();
+      if (mounted) {
         setState(() {
           _wallet = _walletService.currentWallet;
         });
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to refresh wallet: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to refresh wallet: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -161,12 +194,19 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   @override
+  void dispose() {
+    _walletStreamSub?.cancel();
+    _syncStatusStreamSub?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gotham City Wallet'),
         actions: [
-          if (_wallet != null)
+          if (_wallet != null) ...[
             IconButton(
               icon: _isSyncing 
                   ? const SizedBox(
@@ -178,6 +218,21 @@ class _WalletScreenState extends State<WalletScreen> {
               onPressed: _isSyncing ? null : _refreshWallet,
               tooltip: _isSyncing ? 'Syncing...' : 'Refresh Balance',
             ),
+            IconButton(
+              icon: const Icon(Icons.settings),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => WalletSettingsScreen(
+                      walletService: _walletService,
+                    ),
+                  ),
+                );
+              },
+              tooltip: 'Wallet Settings',
+            ),
+          ],
         ],
       ),
       body: _wallet == null ? _buildWalletSetup() : _buildWalletView(),
@@ -330,7 +385,9 @@ class _WalletScreenState extends State<WalletScreen> {
   Widget _buildWalletView() {
     return RefreshIndicator(
       onRefresh: () async {
-        _loadWallet();
+        if (!_isLoading && !_isSyncing) {
+          await _loadWallet();
+        }
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -338,9 +395,9 @@ class _WalletScreenState extends State<WalletScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildBalanceCard(),
+            BalanceCard(wallet: _wallet, isSyncing: _isSyncing),
             const SizedBox(height: 16),
-            _buildAddressCard(),
+            AddressCard(wallet: _wallet),
             const SizedBox(height: 16),
             _buildQuickActions(),
             const SizedBox(height: 16),
@@ -557,6 +614,160 @@ class _WalletScreenState extends State<WalletScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+// Separate widget for balance card with its own state
+class BalanceCard extends StatelessWidget {
+  final Wallet? wallet;
+  final bool isSyncing;
+
+  const BalanceCard({
+    super.key,
+    required this.wallet,
+    required this.isSyncing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 4,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20.0),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: const LinearGradient(
+            colors: [Color(0xFF2A2A2A), Color(0xFF1A1A1A)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.account_balance_wallet,
+                  color: AppTheme.accentGold,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Balance',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Colors.white70,
+                  ),
+                ),
+                const Spacer(),
+                if (isSyncing)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.accentGold,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              wallet != null ? '${wallet!.balance.toStringAsFixed(8)} GTC' : '0.00000000 GTC',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: AppTheme.accentGold,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (isSyncing) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Syncing...',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppTheme.accentGold,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Separate widget for address card with its own state
+class AddressCard extends StatelessWidget {
+  final Wallet? wallet;
+
+  const AddressCard({
+    super.key,
+    required this.wallet,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (wallet == null) return const SizedBox.shrink();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.qr_code,
+                  color: AppTheme.accentGold,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Your Address',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Text(
+                wallet!.address,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: wallet!.address));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Address copied to clipboard'),
+                      backgroundColor: AppTheme.successGreen,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.copy),
+                label: const Text('Copy Address'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

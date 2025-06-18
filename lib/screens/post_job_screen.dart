@@ -26,36 +26,56 @@ class _PostJobScreenState extends State<PostJobScreen> {
     super.dispose();
   }
 
-  void _postJob() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _postJob() async {
+    if (!_formKey.currentState!.validate() || _isPosting) return;
 
     setState(() {
       _isPosting = true;
     });
 
-    // Mock job posting - will be replaced with actual backend
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      // Mock job posting - will be replaced with actual backend
+      await Future.delayed(const Duration(seconds: 2));
 
-    if (mounted) {
-      setState(() {
-        _isPosting = false;
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Job posted successfully!'),
+            backgroundColor: AppTheme.successGreen,
+            duration: Duration(seconds: 3),
+          ),
+        );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Job posted successfully!'),
-          backgroundColor: AppTheme.successGreen,
-        ),
-      );
-
-      // Clear form
-      _titleController.clear();
-      _descriptionController.clear();
-      _rewardController.clear();
-      setState(() {
-        _selectedType = JobType.computation;
-      });
+        // Clear form only after successful post
+        _clearForm();
+      }
+    } catch (e) {
+      print('Error posting job: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to post job: $e'),
+            backgroundColor: AppTheme.dangerRed,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPosting = false;
+        });
+      }
     }
+  }
+  
+  void _clearForm() {
+    _titleController.clear();
+    _descriptionController.clear();
+    _rewardController.clear();
+    setState(() {
+      _selectedType = JobType.computation;
+    });
   }
 
   @override

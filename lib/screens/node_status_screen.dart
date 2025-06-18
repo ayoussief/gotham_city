@@ -44,8 +44,17 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
   }
 
   void _initializeNode() async {
-    await _nodeService.initialize();
-    await _loadData();
+    try {
+      await _nodeService.initialize().timeout(const Duration(seconds: 30));
+      await _loadData();
+    } catch (e) {
+      print('Node initialization failed: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _setupStreams() {
@@ -91,7 +100,7 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
         _nodeService.getNetworkInfo(),
         _loadRecentHeaders(),
         _loadLocalStats(),
-      ]);
+      ]).timeout(const Duration(seconds: 30));
 
       if (mounted) {
         setState(() {
@@ -102,10 +111,23 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
         });
       }
     } catch (e) {
+      print('Failed to load node data: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
+        
+        // Show error message to user
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to connect to Bitcoin node: $e'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: _loadData,
+            ),
+          ),
+        );
       }
     }
   }
@@ -156,14 +178,121 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
   }
 
   Widget _buildLoadingView() {
-    return const Center(
-      child: CircularProgressIndicator(
-        color: AppTheme.accentGold,
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(
+            color: AppTheme.accentGold,
+            strokeWidth: 3,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Connecting to Bitcoin Node',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Attempting to connect to your Bitcoin node...\nThis may take a few moments.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.grey,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = false;
+                  });
+                },
+                icon: const Icon(Icons.close),
+                label: const Text('Cancel'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                ),
+              ),
+              const SizedBox(width: 16),
+              ElevatedButton.icon(
+                onPressed: _loadData,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentGold,
+                  foregroundColor: Colors.black,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfflineState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.cloud_off,
+              size: 80,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Node Offline',
+              style: Theme.of(context).textTheme.headlineMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Unable to connect to your Bitcoin node.\n'
+              'Please check your node configuration and try again.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _loadData,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry Connection'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accentGold,
+                    foregroundColor: Colors.black,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                OutlinedButton.icon(
+                  onPressed: _showNodeSettings,
+                  icon: const Icon(Icons.settings),
+                  label: const Text('Node Settings'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildContent() {
+    // If there's no connection and no data, show offline state
+    if (!_isConnected && _blockchainInfo == null && _networkStats == null) {
+      return _buildOfflineState();
+    }
+
     return RefreshIndicator(
       onRefresh: _loadData,
       child: SingleChildScrollView(

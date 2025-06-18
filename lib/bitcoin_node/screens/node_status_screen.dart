@@ -3,7 +3,7 @@ import 'dart:async';
 import '../models/block_header.dart';
 import '../models/peer.dart';
 import '../services/bitcoin_node_service.dart';
-import '../../lib/theme/app_theme.dart';
+import '../../theme/app_theme.dart';
 
 class NodeStatusScreen extends StatefulWidget {
   const NodeStatusScreen({super.key});
@@ -50,7 +50,7 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
 
   void _setupStreams() {
     _blockchainInfoSub = _nodeService.blockchainInfoStream.listen((info) {
-      if (mounted) {
+      if (mounted && _blockchainInfo != info) {
         setState(() {
           _blockchainInfo = info;
         });
@@ -58,7 +58,7 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
     });
 
     _networkStatsSub = _nodeService.networkStatsStream.listen((stats) {
-      if (mounted) {
+      if (mounted && _networkStats != stats) {
         setState(() {
           _networkStats = stats;
         });
@@ -67,12 +67,12 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
 
     _blockHeadersSub = _nodeService.blockHeadersStream.listen((headers) {
       if (mounted) {
-        _loadRecentHeaders();
+        _updateRecentHeaders();
       }
     });
 
     _connectionSub = _nodeService.connectionStream.listen((connected) {
-      if (mounted) {
+      if (mounted && _isConnected != connected) {
         setState(() {
           _isConnected = connected;
         });
@@ -81,51 +81,96 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
   }
 
   Future<void> _loadData() async {
+    if (_isLoading) return;
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final futures = await Future.wait([
-        _nodeService.getBlockchainInfo(),
-        _nodeService.getNetworkInfo(),
-        _loadRecentHeaders(),
-        _loadLocalStats(),
-      ]);
+      // Load data in parallel with timeout
+      final results = await Future.wait([
+        _nodeService.getBlockchainInfo().timeout(const Duration(seconds: 10)),
+        _nodeService.getNetworkInfo().timeout(const Duration(seconds: 10)),
+        _updateRecentHeaders(),
+        _updateLocalStats(),
+      ]).timeout(const Duration(seconds: 30));
 
       if (mounted) {
+        final newBlockchainInfo = results[0] as BlockchainInfo?;
+        final newNetworkStats = results[1] as NetworkStats?;
+        final isConnected = _nodeService.isConnected;
+        
+        // Only update if data changed
+        bool shouldUpdate = false;
+        if (_blockchainInfo != newBlockchainInfo) {
+          _blockchainInfo = newBlockchainInfo;
+          shouldUpdate = true;
+        }
+        if (_networkStats != newNetworkStats) {
+          _networkStats = newNetworkStats;
+          shouldUpdate = true;
+        }
+        if (_isConnected != isConnected) {
+          _isConnected = isConnected;
+          shouldUpdate = true;
+        }
+        
+        if (shouldUpdate) {
+          setState(() {});
+        }
+      }
+    } catch (e) {
+      print('Error loading node data: $e');
+    } finally {
+      if (mounted) {
         setState(() {
-          _blockchainInfo = futures[0] as BlockchainInfo?;
-          _networkStats = futures[1] as NetworkStats?;
-          _isConnected = _nodeService.isConnected;
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _updateRecentHeaders() async {
+    try {
+      final headers = await _nodeService.getLocalBlockHeaders(limit: 10);
+      if (mounted && !_headersEqual(_recentHeaders, headers)) {
+        setState(() {
+          _recentHeaders = headers;
         });
       }
     } catch (e) {
-      if (mounted) {
+      print('Error loading headers: $e');
+    }
+  }
+  
+  bool _headersEqual(List<BlockHeader> list1, List<BlockHeader> list2) {
+    if (list1.length != list2.length) return false;
+    for (int i = 0; i < list1.length; i++) {
+      if (list1[i].hash != list2[i].hash) return false;
+    }
+    return true;
+  }
+
+  Future<void> _updateLocalStats() async {
+    try {
+      final stats = await _nodeService.getLocalStats();
+      if (mounted && !_mapsEqual(_localStats, stats)) {
         setState(() {
-          _isLoading = false;
+          _localStats = stats;
         });
       }
+    } catch (e) {
+      print('Error loading local stats: $e');
     }
   }
-
-  Future<void> _loadRecentHeaders() async {
-    final headers = await _nodeService.getLocalBlockHeaders(limit: 10);
-    if (mounted) {
-      setState(() {
-        _recentHeaders = headers;
-      });
+  
+  bool _mapsEqual(Map<String, dynamic> map1, Map<String, dynamic> map2) {
+    if (map1.keys.length != map2.keys.length) return false;
+    for (String key in map1.keys) {
+      if (map1[key] != map2[key]) return false;
     }
-  }
-
-  Future<void> _loadLocalStats() async {
-    final stats = await _nodeService.getLocalStats();
-    if (mounted) {
-      setState(() {
-        _localStats = stats;
-      });
-    }
+    return true;
   }
 
   @override

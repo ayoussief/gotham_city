@@ -18,5 +18,4 @@ export 'models/compact_filter.dart';
 export 'models/peer.dart';
 
 // Screens
-export 'screens/node_status_screen.dart'; // Legacy RPC-based screen
-export 'screens/spv_status_screen.dart'; // New SPV client screen
+export 'screens/node_status_screen.dart'; // Full Bitcoin node status screen

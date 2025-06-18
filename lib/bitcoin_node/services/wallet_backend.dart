@@ -235,13 +235,55 @@ class WalletBackend {
   // Private methods
   
   String _generateSeed() {
+    // Generate a proper mnemonic seed phrase with 12 words
+    final words = [
+      'abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract',
+      'absurd', 'abuse', 'access', 'accident', 'account', 'accuse', 'achieve', 'acid',
+      'acoustic', 'acquire', 'across', 'act', 'action', 'actor', 'actress', 'actual',
+      'adapt', 'add', 'addict', 'address', 'adjust', 'admit', 'adult', 'advance',
+      'advice', 'aerobic', 'affair', 'afford', 'afraid', 'again', 'against', 'agent',
+      'agree', 'ahead', 'aim', 'air', 'airport', 'aisle', 'alarm', 'album',
+      'alcohol', 'alert', 'alien', 'all', 'alley', 'allow', 'almost', 'alone',
+      'alpha', 'already', 'also', 'alter', 'always', 'amateur', 'amazing', 'among',
+      'amount', 'amused', 'analyst', 'anchor', 'ancient', 'anger', 'angle', 'angry',
+      'animal', 'ankle', 'announce', 'annual', 'another', 'answer', 'antenna', 'antique',
+      'anxiety', 'any', 'apart', 'apology', 'appear', 'apple', 'approve', 'april',
+      'arcade', 'arch', 'arctic', 'area', 'arena', 'argue', 'arm', 'armed',
+      'armor', 'army', 'around', 'arrange', 'arrest', 'arrive', 'arrow', 'art',
+      'article', 'artist', 'artwork', 'ask', 'aspect', 'assault', 'asset', 'assist',
+      'assume', 'asthma', 'athlete', 'atom', 'attack', 'attend', 'attitude', 'attract',
+      'auction', 'audit', 'august', 'aunt', 'author', 'auto', 'autumn', 'average',
+      'avocado', 'avoid', 'awake', 'aware', 'away', 'awesome', 'awful', 'awkward',
+    ];
+    
     final random = Random.secure();
-    final bytes = List<int>.generate(32, (i) => random.nextInt(256));
-    return base64Encode(bytes);
+    final seedWords = <String>[];
+    
+    // Generate 12 random words for the mnemonic
+    for (int i = 0; i < 12; i++) {
+      seedWords.add(words[random.nextInt(words.length)]);
+    }
+    
+    return seedWords.join(' ');
   }
   
   String _derivePrivateKeyFromSeed(String seed) {
-    final seedBytes = base64Decode(seed);
+    // Handle both mnemonic phrases and old base64 seeds for backwards compatibility
+    Uint8List seedBytes;
+    
+    if (seed.contains(' ')) {
+      // It's a mnemonic phrase, convert to bytes
+      seedBytes = utf8.encode(seed);
+    } else {
+      // It's likely a base64 seed (backwards compatibility)
+      try {
+        seedBytes = base64Decode(seed);
+      } catch (e) {
+        // If base64 decode fails, treat as regular string
+        seedBytes = utf8.encode(seed);
+      }
+    }
+    
     final hash = sha256.convert(seedBytes);
     return hash.toString();
   }

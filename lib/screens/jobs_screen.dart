@@ -12,6 +12,7 @@ class JobsScreen extends StatefulWidget {
 class _JobsScreenState extends State<JobsScreen> {
   List<Job> _jobs = [];
   bool _isLoading = false;
+  DateTime? _lastRefresh;
 
   @override
   void initState() {
@@ -19,15 +20,18 @@ class _JobsScreenState extends State<JobsScreen> {
     _loadJobs();
   }
 
-  void _loadJobs() {
+  Future<void> _loadJobs() async {
+    if (_isLoading) return; // Prevent concurrent loads
+    
     setState(() {
       _isLoading = true;
     });
 
-    // Mock job data - will be replaced with actual backend
-    Future.delayed(const Duration(seconds: 1), () {
-      setState(() {
-        _jobs = [
+    try {
+      // Mock job data - will be replaced with actual backend
+      await Future.delayed(const Duration(seconds: 1));
+      
+      final newJobs = [
           Job(
             id: '1',
             title: 'Data Processing Task',
@@ -73,9 +77,36 @@ class _JobsScreenState extends State<JobsScreen> {
             confirmations: 1,
           ),
         ];
-        _isLoading = false;
-      });
-    });
+      
+      // Only update if data actually changed
+      if (mounted && !_listsEqual(_jobs, newJobs)) {
+        setState(() {
+          _jobs = newJobs;
+        });
+      }
+      
+      _lastRefresh = DateTime.now();
+    } catch (e) {
+      print('Error loading jobs: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  
+  bool _listsEqual(List<Job> list1, List<Job> list2) {
+    if (list1.length != list2.length) return false;
+    for (int i = 0; i < list1.length; i++) {
+      if (list1[i].id != list2[i].id || 
+          list1[i].status != list2[i].status ||
+          list1[i].confirmations != list2[i].confirmations) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Color _getStatusColor(JobStatus status) {
@@ -158,9 +189,8 @@ class _JobsScreenState extends State<JobsScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        _loadJobs();
-      },
+      onRefresh: _loadJobs,
+      color: AppTheme.accentGold,
       child: ListView.builder(
         padding: const EdgeInsets.all(16.0),
         itemCount: _jobs.length,
