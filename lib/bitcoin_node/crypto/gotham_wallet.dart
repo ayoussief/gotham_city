@@ -809,8 +809,8 @@ class CExtKey {
   
   /// Create from seed key
   static CExtKey fromSeed(CKey seedKey) {
-    // HMAC-SHA512 with "Bitcoin seed" key
-    final hmac = Hmac(sha512, utf8.encode('Bitcoin seed'));
+    // HMAC-SHA512 with "Gotham seed" key
+    final hmac = Hmac(sha512, utf8.encode('Gotham seed'));
     final hash = hmac.convert(seedKey.getBytes());
     
     final privateKey = CKey.fromBytes(Uint8List.fromList(hash.bytes.sublist(0, 32)));

@@ -156,7 +156,7 @@ class WalletBackend {
         throw Exception('No active wallet found');
       }
       
-      final fromAddress = wallet.address;
+      final fromAddress = wallet.getNewAddress();
       
       // Use our real Bitcoin transaction creation and broadcasting
       final txId = await createAndBroadcastTransaction(
@@ -1381,18 +1381,18 @@ class WalletBackend {
       case OutputType.p2pkh:
         // P2PKH: Base58Check(version + Hash160(pubkey))
         final hash160 = _hash160(publicKey);
-        return _encodeBase58Check([0x00, ...hash160]); // Mainnet P2PKH version
+        return _encodeBase58Check([0x47, ...hash160]); // Gotham P2PKH version (0x47 = 'G')
         
       case OutputType.bech32:
         // P2WPKH: Bech32 encoding of witness program
         final hash160 = _hash160(publicKey);
-        return _encodeBech32('bc', 0, hash160); // Mainnet bech32
+        return _encodeBech32(GothamChainParams.bech32Hrp, 0, hash160); // Gotham bech32
         
       case OutputType.p2sh:
         // P2SH-P2WPKH: Base58Check(version + Hash160(redeemScript))
         final witnessProgram = Uint8List.fromList([0x00, 0x14, ..._hash160(publicKey)]);
         final redeemScriptHash = _hash160(witnessProgram);
-        return _encodeBase58Check([0x05, ...redeemScriptHash]); // Mainnet P2SH version
+        return _encodeBase58Check([0x4F, ...redeemScriptHash]); // Gotham P2SH version (0x4F = 'O')
         
       default:
         throw UnsupportedError('Unsupported output type: $outputType');
@@ -1555,7 +1555,7 @@ class WalletBackend {
       final publicKeyBytes = Secp256k1Operations.createPublicKey(privateKeyBytes);
       final publicKeyHex = publicKeyBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
       
-      // Derive Bitcoin address
+      // Derive Gotham address
       final address = _publicKeyToAddress(publicKeyBytes, OutputType.bech32);
       
       // Store the address mapping
@@ -1710,7 +1710,7 @@ class WalletBackend {
         final pubKeyBytes = Secp256k1Operations.createPublicKey(privKeyBytes);
         final address = _publicKeyToAddress(pubKeyBytes, OutputType.bech32);
         
-        if (address.startsWith('bc1') && address.length >= 42) {
+        if (address.startsWith('gt1') && address.length >= 42) {
           testsPassed++;
           details['addressGeneration'] = 'PASS';
           details['testAddress'] = address;

@@ -25,8 +25,8 @@ class GothamChainParams {
   
   // Network Identifiers
   static const String networkName = "gotham";
-  static const String addressPrefix = "1"; // From base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,0);
-  static const String scriptPrefix = "3"; // From base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,5);
+  static const String addressPrefix = "G"; // From base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,0x47); // 'G'
+  static const String scriptPrefix = "O"; // From base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,0x4F); // 'O'
   
   // DNS Seeds - Currently empty in the source, will need to be added by Gotham network
   static const List<String> dnsSeeds = [

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import '../config/gotham_chain_params.dart';
 
-/// Gotham-compatible address generation following Bitcoin standards
+/// Gotham-compatible address generation following Gotham standards
 class GothamAddress {
   
   /// Generate a P2PKH address from a public key (starts with '1')

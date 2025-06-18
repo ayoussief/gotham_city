@@ -110,8 +110,8 @@ class BIP39 {
   static Uint8List mnemonicToMasterKey(String mnemonic, {String passphrase = ''}) {
     final seed = mnemonicToSeed(mnemonic, passphrase: passphrase);
     
-    // HMAC-SHA512 with "Bitcoin seed" as key
-    final hmac = Hmac(sha512, utf8.encode('Bitcoin seed'));
+    // HMAC-SHA512 with "Gotham seed" as key
+    final hmac = Hmac(sha512, utf8.encode('Gotham seed'));
     final hash = hmac.convert(seed);
     
     // Return first 32 bytes as master private key

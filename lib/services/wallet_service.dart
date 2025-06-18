@@ -395,7 +395,7 @@ class WalletService {
     return count;
   }
 
-  Future<List<Transaction>> getTransactionHistory() async {
+  Future<List<Transaction>> getTransactionObjects() async {
     if (_currentWallet == null) return [];
     
     try {

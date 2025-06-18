@@ -525,7 +525,7 @@ class _AddressDetailsScreenState extends State<AddressDetailsScreen> {
         Expanded(
           child: SelectableText(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: value.length > 30 ? 'monospace' : null,
               fontSize: value.length > 30 ? 12 : null,
             ),

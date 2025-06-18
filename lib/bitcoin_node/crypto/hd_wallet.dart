@@ -21,8 +21,8 @@ class HDWallet {
     
     final seed = BIP39.mnemonicToSeed(mnemonic, passphrase: passphrase);
     
-    // Generate master key using HMAC-SHA512 with "Bitcoin seed"
-    final hmac = Hmac(sha512, utf8.encode('Bitcoin seed'));
+    // Generate master key using HMAC-SHA512 with "Gotham seed"
+    final hmac = Hmac(sha512, utf8.encode('Gotham seed'));
     final hash = hmac.convert(seed);
     
     final masterKey = Uint8List.fromList(hash.bytes.sublist(0, 32));

@@ -73,7 +73,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
   Future<void> _loadTransactions() async {
     try {
-      final transactions = await _walletService.getTransactionHistory();
+      final transactions = await _walletService.getTransactionObjects();
       if (mounted && !_transactionsEqual(_transactions, transactions)) {
         setState(() {
           _transactions = transactions;

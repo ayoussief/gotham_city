@@ -285,7 +285,7 @@ class GothamWalletManager {
   }
 
   Future<void> _updateStartupWallets(String walletName, bool loadOnStartup) async {
-    // TODO: Implement startup wallet persistence (similar to Bitcoin Core settings)
+    // TODO: Implement startup wallet persistence (similar to Gotham Core settings)
     print('GothamWalletManager: Updated startup setting for $walletName: $loadOnStartup');
   }
 }

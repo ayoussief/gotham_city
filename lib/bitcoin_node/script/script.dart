@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-/// Bitcoin Script implementation matching Gotham Core's CScript
+/// Gotham Script implementation matching Gotham Core's CScript
 class CScript {
   List<int> _data = [];
   
@@ -170,7 +170,7 @@ enum ScriptType {
   nullData,
 }
 
-// Bitcoin Script opcodes (subset of most commonly used)
+// Gotham Script opcodes (subset of most commonly used)
 const int OP_0 = 0x00;
 const int OP_1 = 0x51;
 const int OP_16 = 0x60;

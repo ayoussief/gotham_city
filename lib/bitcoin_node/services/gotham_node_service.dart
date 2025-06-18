@@ -7,10 +7,10 @@ import '../models/block_header.dart';
 import '../models/peer.dart';
 import 'database_service.dart';
 
-class BitcoinNodeService {
-  static final BitcoinNodeService _instance = BitcoinNodeService._internal();
-  factory BitcoinNodeService() => _instance;
-  BitcoinNodeService._internal();
+class GothamNodeService {
+  static final GothamNodeService _instance = GothamNodeService._internal();
+  factory GothamNodeService() => _instance;
+  GothamNodeService._internal();
 
   final DatabaseService _db = DatabaseService();
   

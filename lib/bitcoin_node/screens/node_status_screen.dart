@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../models/block_header.dart';
 import '../models/peer.dart';
-import '../services/bitcoin_node_service.dart';
+import '../services/gotham_node_service.dart';
 import '../../theme/app_theme.dart';
 
 class NodeStatusScreen extends StatefulWidget {
@@ -13,7 +13,7 @@ class NodeStatusScreen extends StatefulWidget {
 }
 
 class _NodeStatusScreenState extends State<NodeStatusScreen> {
-  final BitcoinNodeService _nodeService = BitcoinNodeService();
+  final GothamNodeService _nodeService = GothamNodeService();
   
   BlockchainInfo? _blockchainInfo;
   NetworkStats? _networkStats;
@@ -583,7 +583,7 @@ class _NodeSettingsDialogState extends State<_NodeSettingsDialog> {
         ),
         ElevatedButton(
           onPressed: () async {
-            await BitcoinNodeService().saveConfiguration(
+            await GothamNodeService().saveConfiguration(
               host: _hostController.text,
               port: int.tryParse(_portController.text) ?? 8332,
               user: _userController.text,

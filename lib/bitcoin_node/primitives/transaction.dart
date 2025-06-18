@@ -374,7 +374,7 @@ class CTransaction {
       _serializeWithWitness(tx) : 
       _serializeWithoutWitness(tx);
     
-    // Double SHA256 (Bitcoin's hash algorithm)
+    // Double SHA256 (Gotham's hash algorithm)
     final hash1 = sha256.convert(serialized);
     final hash2 = sha256.convert(hash1.bytes);
     
@@ -426,7 +426,7 @@ class CTransaction {
   }
 }
 
-// Utility functions for serialization (matching Bitcoin's serialization format)
+// Utility functions for serialization (matching Gotham's serialization format)
 
 Uint8List _serializeUint32(int value) {
   final bytes = ByteData(4);
