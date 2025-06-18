@@ -7,6 +7,9 @@ import '../models/block_header.dart';
 import '../models/peer.dart';
 import 'database_service.dart';
 
+/// Legacy RPC client for connecting to external Bitcoin Core nodes
+/// @deprecated Use SPVClient for lightweight node functionality
+@Deprecated('Use SPVClient for lightweight node functionality')
 class GothamNodeService {
   static final GothamNodeService _instance = GothamNodeService._internal();
   factory GothamNodeService() => _instance;

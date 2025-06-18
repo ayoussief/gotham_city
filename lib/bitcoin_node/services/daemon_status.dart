@@ -7,6 +7,8 @@ import 'wallet_storage.dart';
 
 /// Daemon status service similar to Bitcoin Core's daemon
 /// Provides RPC-like interface and status monitoring
+/// @deprecated Integrated into GothamDaemon for better efficiency
+@Deprecated('Integrated into GothamDaemon for better efficiency')
 class DaemonStatus {
   static final DaemonStatus _instance = DaemonStatus._internal();
   factory DaemonStatus() => _instance;

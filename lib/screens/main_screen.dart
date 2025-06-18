@@ -4,6 +4,7 @@ import 'jobs_screen.dart';
 import 'post_job_screen.dart';
 import 'transactions_screen.dart';
 import '../bitcoin_node/screens/node_status_screen.dart';
+import '../bitcoin_node/screens/daemon_control_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -20,7 +21,7 @@ class _MainScreenState extends State<MainScreen> {
     const JobsScreen(),
     const TransactionsScreen(),
     const PostJobScreen(),
-    const NodeStatusScreen(),
+    const NodeStatusScreen(), // This now includes daemon control
   ];
 
   @override
@@ -60,7 +61,7 @@ class _MainScreenState extends State<MainScreen> {
             label: 'Post Job',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.hub),
+            icon: Icon(Icons.settings_applications),
             label: 'Node',
           ),
         ],

@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import '../models/block_header.dart';
-import '../models/peer.dart';
-import '../services/gotham_node_service.dart';
+import '../bitcoin_node/services/gotham_daemon.dart';
 import '../theme/app_theme.dart';
 
 class NodeStatusScreen extends StatefulWidget {
@@ -13,19 +11,16 @@ class NodeStatusScreen extends StatefulWidget {
 }
 
 class _NodeStatusScreenState extends State<NodeStatusScreen> {
-  final GothamNodeService _nodeService = GothamNodeService();
+  final GothamDaemon _daemon = GothamDaemon();
   
-  BlockchainInfo? _blockchainInfo;
-  NetworkStats? _networkStats;
-  List<BlockHeader> _recentHeaders = [];
-  Map<String, dynamic> _localStats = {};
+  Map<String, dynamic>? _daemonInfo;
+  Map<String, dynamic>? _realtimeStats;
+  List<Map<String, dynamic>> _peerInfo = [];
   bool _isConnected = false;
   bool _isLoading = true;
   
-  StreamSubscription? _blockchainInfoSub;
-  StreamSubscription? _networkStatsSub;
-  StreamSubscription? _blockHeadersSub;
-  StreamSubscription? _connectionSub;
+  StreamSubscription? _statsSubscription;
+  StreamSubscription? _eventsSubscription;
 
   @override
   void initState() {
@@ -36,16 +31,16 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
 
   @override
   void dispose() {
-    _blockchainInfoSub?.cancel();
-    _networkStatsSub?.cancel();
-    _blockHeadersSub?.cancel();
-    _connectionSub?.cancel();
+    _statsSubscription?.cancel();
+    _eventsSubscription?.cancel();
     super.dispose();
   }
 
   void _initializeNode() async {
     try {
-      await _nodeService.initialize().timeout(const Duration(seconds: 30));
+      if (!_daemon.isRunning) {
+        await _daemon.startDaemon().timeout(const Duration(seconds: 30));
+      }
       await _loadData();
     } catch (e) {
       print('Node initialization failed: $e');
@@ -58,33 +53,20 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
   }
 
   void _setupStreams() {
-    _blockchainInfoSub = _nodeService.blockchainInfoStream.listen((info) {
+    // Listen to daemon stats
+    _statsSubscription = _daemon.statsStream.listen((stats) {
       if (mounted) {
         setState(() {
-          _blockchainInfo = info;
+          _realtimeStats = stats;
+          _isConnected = stats['network_connected'] ?? false;
         });
       }
     });
 
-    _networkStatsSub = _nodeService.networkStatsStream.listen((stats) {
-      if (mounted) {
-        setState(() {
-          _networkStats = stats;
-        });
-      }
-    });
-
-    _blockHeadersSub = _nodeService.blockHeadersStream.listen((headers) {
-      if (mounted) {
-        _loadRecentHeaders();
-      }
-    });
-
-    _connectionSub = _nodeService.connectionStream.listen((connected) {
-      if (mounted) {
-        setState(() {
-          _isConnected = connected;
-        });
+    // Listen to daemon events
+    _eventsSubscription = _daemon.daemonEventsStream.listen((event) {
+      if (mounted && event['event'] == 'sync_progress') {
+        _loadData(); // Refresh data on sync progress
       }
     });
   }
@@ -95,18 +77,13 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
     });
 
     try {
-      final futures = await Future.wait([
-        _nodeService.getBlockchainInfo(),
-        _nodeService.getNetworkInfo(),
-        _loadRecentHeaders(),
-        _loadLocalStats(),
-      ]).timeout(const Duration(seconds: 30));
-
+      // Load daemon info and peer info
+      _daemonInfo = _daemon.getDaemonInfo();
+      _peerInfo = await _daemon.getPeerInfo();
+      
       if (mounted) {
         setState(() {
-          _blockchainInfo = futures[0] as BlockchainInfo?;
-          _networkStats = futures[1] as NetworkStats?;
-          _isConnected = _nodeService.isConnected;
+          _isConnected = _daemon.isRunning;
           _isLoading = false;
         });
       }
@@ -120,7 +97,7 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
         // Show error message to user
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to connect to Bitcoin node: $e'),
+            content: Text('Failed to load daemon data: $e'),
             backgroundColor: Colors.red,
             action: SnackBarAction(
               label: 'Retry',
@@ -132,21 +109,83 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
     }
   }
 
-  Future<void> _loadRecentHeaders() async {
-    final headers = await _nodeService.getLocalBlockHeaders(limit: 10);
-    if (mounted) {
-      setState(() {
-        _recentHeaders = headers;
-      });
+  Future<void> _startDaemon() async {
+    if (_daemon.isRunning) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      await _daemon.startDaemon();
+      await _loadData();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Gotham Daemon started successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to start daemon: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  Future<void> _loadLocalStats() async {
-    final stats = await _nodeService.getLocalStats();
-    if (mounted) {
-      setState(() {
-        _localStats = stats;
-      });
+  Future<void> _stopDaemon() async {
+    if (!_daemon.isRunning) return;
+    
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      await _daemon.stopDaemon();
+      
+      if (mounted) {
+        setState(() {
+          _isConnected = false;
+          _daemonInfo = null;
+          _realtimeStats = null;
+          _peerInfo = [];
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🛑 Gotham Daemon stopped'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Failed to stop daemon: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -154,22 +193,45 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Node Status'),
+        title: Row(
+          children: [
+            const Text('Gotham Node'),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: (_isConnected ? Colors.green : Colors.red).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                _isConnected ? 'RUNNING' : 'STOPPED',
+                style: TextStyle(
+                  color: _isConnected ? Colors.green : Colors.red,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
+          if (!_daemon.isRunning) ...[
+            IconButton(
+              icon: const Icon(Icons.play_arrow, color: Colors.green),
+              onPressed: _startDaemon,
+              tooltip: 'Start Daemon',
+            ),
+          ] else ...[
+            IconButton(
+              icon: const Icon(Icons.stop, color: Colors.red),
+              onPressed: _stopDaemon,
+              tooltip: 'Stop Daemon',
+            ),
+          ],
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
             tooltip: 'Refresh',
-          ),
-          IconButton(
-            icon: const Icon(Icons.sync),
-            onPressed: () => _nodeService.startSync(),
-            tooltip: 'Sync Now',
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _showNodeSettings,
-            tooltip: 'Node Settings',
           ),
         ],
       ),
@@ -188,12 +250,14 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
           ),
           const SizedBox(height: 24),
           Text(
-            'Connecting to Bitcoin Node',
+            _daemon.isRunning ? 'Loading Node Data' : 'Starting Gotham Daemon',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 16),
           Text(
-            'Attempting to connect to your Bitcoin node...\nThis may take a few moments.',
+            _daemon.isRunning 
+              ? 'Loading blockchain information and network stats...'
+              : 'Starting the Gotham daemon...\nThis may take a few moments.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Colors.grey,
             ),
@@ -247,14 +311,14 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
             ),
             const SizedBox(height: 24),
             Text(
-              'Node Offline',
+              'Daemon Stopped',
               style: Theme.of(context).textTheme.headlineMedium,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             Text(
-              'Unable to connect to your Bitcoin node.\n'
-              'Please check your node configuration and try again.',
+              'The Gotham daemon is not running.\n'
+              'Start the daemon to begin syncing with the network.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.grey,
               ),
@@ -265,19 +329,13 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ElevatedButton.icon(
-                  onPressed: _loadData,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Retry Connection'),
+                  onPressed: _startDaemon,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Start Daemon'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.accentGold,
-                    foregroundColor: Colors.black,
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
                   ),
-                ),
-                const SizedBox(width: 16),
-                OutlinedButton.icon(
-                  onPressed: _showNodeSettings,
-                  icon: const Icon(Icons.settings),
-                  label: const Text('Node Settings'),
                 ),
               ],
             ),
@@ -288,8 +346,8 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
   }
 
   Widget _buildContent() {
-    // If there's no connection and no data, show offline state
-    if (!_isConnected && _blockchainInfo == null && _networkStats == null) {
+    // If daemon is not running, show offline state
+    if (!_daemon.isRunning) {
       return _buildOfflineState();
     }
 
@@ -300,19 +358,290 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildConnectionStatus(),
+            _buildDaemonStatus(),
             const SizedBox(height: 16),
-            _buildBlockchainInfo(),
+            _buildDaemonInfo(),
             const SizedBox(height: 16),
-            _buildNetworkStats(),
+            _buildRealtimeStats(),
             const SizedBox(height: 16),
-            _buildLocalStats(),
+            _buildPeerInfo(),
             const SizedBox(height: 16),
-            _buildRecentHeaders(),
+            _buildDaemonControls(),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildDaemonStatus() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _daemon.isRunning ? Icons.check_circle : Icons.error,
+                  color: _daemon.isRunning ? AppTheme.successGreen : AppTheme.dangerRed,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Daemon Status',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (_daemon.isRunning ? AppTheme.successGreen : AppTheme.dangerRed).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _daemon.isRunning ? 'RUNNING' : 'STOPPED',
+                    style: TextStyle(
+                      color: _daemon.isRunning ? AppTheme.successGreen : AppTheme.dangerRed,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (_realtimeStats != null && _realtimeStats!['sync_progress'] != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.accentGold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Syncing... ${(_realtimeStats!['sync_progress'] * 100).toStringAsFixed(1)}%',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.accentGold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDaemonInfo() {
+    if (_daemonInfo == null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            'Daemon information not available',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Daemon Info',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.accentGold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildInfoRow('Version', _daemonInfo!['version'] ?? 'Unknown'),
+            _buildInfoRow('PID', _daemonInfo!['pid']?.toString() ?? 'Unknown'),
+            _buildInfoRow('Uptime', _formatUptime(_daemonInfo!['uptime'] ?? 0)),
+            _buildInfoRow('Data Dir', _daemonInfo!['data_dir'] ?? 'Unknown'),
+            _buildInfoRow('Network', _daemonInfo!['network'] ?? 'Unknown'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRealtimeStats() {
+    if (_realtimeStats == null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            'Real-time stats not available',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Real-time Stats',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.accentGold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildInfoRow('Current Height', _realtimeStats!['current_height']?.toString() ?? '0'),
+            _buildInfoRow('Best Block', (_realtimeStats!['best_block_hash'] ?? '').toString().substring(0, 16) + '...'),
+            _buildInfoRow('Sync Progress', '${(_realtimeStats!['sync_progress'] * 100).toStringAsFixed(2)}%'),
+            _buildInfoRow('Network Connected', _realtimeStats!['network_connected'] == true ? 'Yes' : 'No'),
+            _buildInfoRow('Active Peers', _realtimeStats!['active_peers']?.toString() ?? '0'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPeerInfo() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Peer Connections',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.accentGold,
+                  ),
+                ),
+                Text(
+                  '${_peerInfo.length} peers',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.accentGold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_peerInfo.isEmpty) ...[
+              Text(
+                'No peer connections',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey,
+                ),
+              ),
+            ] else ...[
+              ...(_peerInfo.take(5).map((peer) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.computer,
+                      size: 16,
+                      color: AppTheme.accentGold,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        peer['addr'] ?? 'Unknown',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                    Text(
+                      peer['version']?.toString() ?? '',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ))),
+              if (_peerInfo.length > 5) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '... and ${_peerInfo.length - 5} more',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDaemonControls() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Daemon Controls',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppTheme.accentGold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _daemon.isRunning ? _stopDaemon : _startDaemon,
+                    icon: Icon(_daemon.isRunning ? Icons.stop : Icons.play_arrow),
+                    label: Text(_daemon.isRunning ? 'Stop Daemon' : 'Start Daemon'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _daemon.isRunning ? Colors.red : Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _loadData,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatUptime(int seconds) {
+    if (seconds < 60) return '${seconds}s';
+    if (seconds < 3600) return '${(seconds / 60).floor()}m ${seconds % 60}s';
+    final hours = (seconds / 3600).floor();
+    final minutes = ((seconds % 3600) / 60).floor();
+    return '${hours}h ${minutes}m';
   }
 
   Widget _buildConnectionStatus() {

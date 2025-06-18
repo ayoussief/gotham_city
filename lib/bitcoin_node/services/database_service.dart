@@ -1,14 +1,33 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_common_ffi.dart';
 import 'package:path/path.dart';
 import '../models/block_header.dart';
 
+/// Consolidated database service with cross-platform support
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
   factory DatabaseService() => _instance;
   DatabaseService._internal();
 
   Database? _database;
+  static bool _initialized = false;
+
+  /// Initialize database factory for cross-platform support
+  static void initializeDatabaseFactory() {
+    if (_initialized) return;
+
+    // Initialize database factory for desktop platforms
+    if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+      // Initialize FFI
+      sqfliteFfiInit();
+      // Change the default factory
+      databaseFactory = databaseFactoryFfi;
+    }
+    
+    _initialized = true;
+  }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
