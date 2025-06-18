@@ -1,4 +1,4 @@
-package com.example.gotham_city
+package com.gotham.wallet
 
 import io.flutter.embedding.android.FlutterActivity
 
