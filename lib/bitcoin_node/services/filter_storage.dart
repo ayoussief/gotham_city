@@ -3,6 +3,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/block_header.dart';
 import '../models/compact_filter.dart';
+import 'database_helper.dart';
 
 // Storage service for compact filters and headers
 class FilterStorage {
@@ -121,6 +122,8 @@ class FilterStorage {
   }
 
   Future<void> initialize() async {
+    // Initialize database factory for desktop platforms
+    DatabaseHelper.initializeDatabaseFactory();
     await database; // Ensure database is initialized
     print('Filter storage initialized');
   }

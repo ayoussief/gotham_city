@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/block_header.dart';
+import '../bitcoin_node/services/database_helper.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();
@@ -17,6 +18,9 @@ class DatabaseService {
   }
 
   Future<Database> _initDatabase() async {
+    // Initialize database factory for desktop platforms
+    DatabaseHelper.initializeDatabaseFactory();
+    
     final databasesPath = await getDatabasesPath();
     final path = join(databasesPath, 'gotham_node.db');
 

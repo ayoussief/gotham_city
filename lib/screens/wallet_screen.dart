@@ -100,13 +100,20 @@ class _WalletScreenState extends State<WalletScreen> {
     });
 
     try {
-      final wallet = await _walletService.createNewWallet();
+      print('Starting wallet creation...');
+      
+      // Add timeout to prevent infinite loading
+      final wallet = await _walletService.createNewWallet()
+          .timeout(const Duration(seconds: 30));
+      
+      print('Wallet created successfully: ${wallet.address}');
       
       // Show seed phrase to user
       if (mounted && wallet.seedPhrase != null) {
         await _showSeedPhraseDialog(wallet.seedPhrase!);
       }
     } catch (e) {
+      print('Error creating wallet: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

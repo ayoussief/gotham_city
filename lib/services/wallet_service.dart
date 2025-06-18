@@ -81,12 +81,22 @@ class WalletService {
   }
 
   Future<Wallet> createNewWallet() async {
-    if (!_isInitialized) await initialize();
+    print('WalletService: Starting wallet creation...');
+    
+    if (!_isInitialized) {
+      print('WalletService: Initializing...');
+      await initialize();
+    }
 
     try {
+      print('WalletService: Generating HD wallet...');
       // Generate new HD wallet
       final seedPhrase = await _walletBackend.createNewWallet();
+      print('WalletService: Seed phrase generated');
+      
+      print('WalletService: Getting new address...');
       final address = await _walletBackend.getNewAddress();
+      print('WalletService: Address generated: $address');
       
       // Create wallet model
       _currentWallet = Wallet(
@@ -98,17 +108,26 @@ class WalletService {
         createdAt: DateTime.now(),
         network: GothamChainParams.networkName,
       );
+      print('WalletService: Wallet model created');
 
       // Save wallet
+      print('WalletService: Saving wallet...');
       await _saveWallet();
+      print('WalletService: Wallet saved');
       
-      // Start SPV sync
-      await _spvClient.startSync();
+      // Start SPV sync (but don't wait for it to complete)
+      print('WalletService: Starting SPV sync...');
+      _spvClient.startSync().catchError((e) {
+        print('SPV sync error (non-blocking): $e');
+      });
       _setupSyncListeners();
+      print('WalletService: SPV sync started');
       
       _walletController.add(_currentWallet);
+      print('WalletService: Wallet creation completed successfully');
       return _currentWallet!;
     } catch (e) {
+      print('WalletService: Error creating wallet: $e');
       throw Exception('Failed to create wallet: $e');
     }
   }

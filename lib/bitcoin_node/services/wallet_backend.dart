@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'filter_storage.dart';
+import 'wallet_storage.dart';
 import '../config/gotham_chain_params.dart';
 
 // Wallet backend for SPV client
@@ -13,6 +14,7 @@ class WalletBackend {
   WalletBackend._internal();
 
   final FilterStorage _storage = FilterStorage();
+  final WalletStorage _walletStorage = WalletStorage();
   
   // HD wallet state
   String? _masterSeed;
@@ -25,14 +27,29 @@ class WalletBackend {
   
   Future<void> initialize() async {
     await _storage.initialize();
+    await _walletStorage.initialize();
     await _loadWalletState();
     print('Wallet backend initialized');
   }
   
   // Wallet creation and restoration
   Future<String> createNewWallet() async {
+    print('WalletBackend: Generating seed...');
     final seed = _generateSeed();
+    print('WalletBackend: Seed generated, initializing from seed...');
+    
     await _initializeFromSeed(seed);
+    print('WalletBackend: Initialized from seed');
+    
+    // Store wallet descriptor in wallet.dat
+    print('WalletBackend: Storing wallet descriptor...');
+    await _walletStorage.storeWalletDescriptor(
+      seedPhrase: seed,
+      masterPrivateKey: _masterPrivateKey!,
+      label: 'Gotham HD Wallet',
+    );
+    print('WalletBackend: Wallet descriptor stored');
+    
     return seed;
   }
   
@@ -70,6 +87,18 @@ class WalletBackend {
   // Address management
   Future<String> getNewAddress() async {
     final address = await _deriveAddress(_addressIndex);
+    final privateKey = _addressToPrivateKey[address]!;
+    final publicKey = _addressToPublicKey[address]!;
+    
+    // Store address in wallet.dat
+    await _walletStorage.storeAddress(
+      address: address,
+      privateKey: privateKey,
+      publicKey: publicKey,
+      derivationIndex: _addressIndex,
+      label: 'Address ${_addressIndex}',
+    );
+    
     _addressIndex++;
     await _saveWalletState();
     return address;
@@ -401,13 +430,48 @@ class WalletBackend {
   }
   
   Future<void> _loadWalletState() async {
-    // Load wallet state from storage
-    // This would typically load from secure storage
+    // Load wallet state from wallet.dat
+    try {
+      final walletExists = await _walletStorage.walletExists();
+      if (walletExists) {
+        final descriptor = _walletStorage.getWalletDescriptor();
+        if (descriptor != null) {
+          _masterSeed = descriptor['seed_phrase'];
+          _masterPrivateKey = descriptor['master_private_key'] ?? 
+                             _derivePrivateKeyFromSeed(_masterSeed!);
+        }
+        
+        final addresses = _walletStorage.getAddresses();
+        for (final entry in addresses.entries) {
+          final address = entry.key;
+          final addressData = entry.value;
+          
+          if (addressData['private_key'] != null) {
+            _addressToPrivateKey[address] = addressData['private_key'];
+          }
+          if (addressData['public_key'] != null) {
+            _addressToPublicKey[address] = addressData['public_key'];
+          }
+        }
+        
+        _addressIndex = _walletStorage.getAddressIndex();
+        print('Wallet state loaded from wallet.dat: ${addresses.length} addresses');
+      } else {
+        print('No existing wallet.dat found');
+      }
+    } catch (e) {
+      print('Error loading wallet state: $e');
+    }
   }
   
   Future<void> _saveWalletState() async {
-    // Save wallet state to storage
-    // This would typically save to secure storage
+    // Save wallet state to wallet.dat
+    try {
+      await _walletStorage.updateAddressIndex(_addressIndex);
+      print('Wallet state saved to wallet.dat');
+    } catch (e) {
+      print('Error saving wallet state: $e');
+    }
   }
   
   String _deriveAddressFromPrivateKey(String privateKey) {
