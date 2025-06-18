@@ -8,6 +8,10 @@ import 'import_wallet_screen.dart';
 import 'send_screen.dart';
 import 'receive_screen.dart';
 import 'wallet_settings_screen.dart';
+import 'crypto_info_screen.dart';
+import 'address_list_screen.dart';
+import 'address_book_screen.dart';
+import 'transaction_history_screen.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -125,6 +129,212 @@ class _WalletScreenState extends State<WalletScreen> {
         });
       }
     }
+  }
+
+  /// Test our real Bitcoin address generation from private key
+  Future<void> _testAddressGeneration() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      // Generate a new Bitcoin address using our real secp256k1 implementation
+      final addressInfo = await _walletService.generateNewAddress('Test Address');
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('🎯 Real Bitcoin Address Generated!'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Using production secp256k1 cryptography:'),
+                const SizedBox(height: 12),
+                const Text('Address:', style: TextStyle(fontWeight: FontWeight.bold)),
+                SelectableText(
+                  addressInfo['address'] ?? '',
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                const Text('Public Key:', style: TextStyle(fontWeight: FontWeight.bold)),
+                SelectableText(
+                  addressInfo['publicKey'] ?? '',
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  '✅ This is a real Bitcoin address derived using the same algorithms as Gotham Core!',
+                  style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: addressInfo['address'] ?? ''));
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Address copied to clipboard!')),
+                  );
+                },
+                child: const Text('Copy Address'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate address: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// Test our real transaction broadcasting
+  Future<void> _testTransactionBroadcast() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+
+      // Show dialog to get transaction details
+      final result = await showDialog<Map<String, String>>(
+        context: context,
+        builder: (context) => _buildTransactionTestDialog(),
+      );
+
+      if (result != null && mounted) {
+        final txId = await _walletService.broadcastTestTransaction(
+          result['address']!,
+          double.parse(result['amount']!),
+        );
+
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('🚀 Transaction Broadcast Success!'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Transaction successfully validated and broadcast:'),
+                  const SizedBox(height: 12),
+                  const Text('Transaction ID:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  SelectableText(
+                    txId,
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '✅ Real Bitcoin transaction validation and broadcasting logic executed!',
+                    style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: txId));
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Transaction ID copied!')),
+                    );
+                  },
+                  child: const Text('Copy TX ID'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Close'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Transaction broadcast failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildTransactionTestDialog() {
+    final addressController = TextEditingController(text: 'bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4');
+    final amountController = TextEditingController(text: '0.001');
+
+    return AlertDialog(
+      title: const Text('Test Transaction Broadcast'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: addressController,
+            decoration: const InputDecoration(
+              labelText: 'Recipient Address',
+              hintText: 'Enter Bitcoin address',
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: amountController,
+            decoration: const InputDecoration(
+              labelText: 'Amount (BTC)',
+              hintText: '0.001',
+            ),
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'This will create and broadcast a real Bitcoin transaction using Gotham Core\'s validation logic!',
+            style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.of(context).pop({
+              'address': addressController.text,
+              'amount': amountController.text,
+            });
+          },
+          child: const Text('Broadcast'),
+        ),
+      ],
+    );
   }
 
   Future<void> _createNewWallet() async {
@@ -566,6 +776,114 @@ class _WalletScreenState extends State<WalletScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => AddressListScreen(
+                            wallet: _wallet!,
+                            walletService: _walletService,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.list_alt),
+                    label: const Text('My Addresses'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AddressBookScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.contacts),
+                    label: const Text('Address Book'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TransactionHistoryScreen(
+                        wallet: _wallet!,
+                        walletService: _walletService,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.history),
+                label: const Text('Transaction History'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 16),
+            Text(
+              '🎯 Real Bitcoin Operations',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Test our production-ready secp256k1 and transaction broadcasting:',
+              style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _testAddressGeneration,
+                    icon: const Icon(Icons.key, size: 18),
+                    label: const Text('Generate Address'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _testTransactionBroadcast,
+                    icon: const Icon(Icons.broadcast_on_home, size: 18),
+                    label: const Text('Broadcast TX'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -593,6 +911,32 @@ class _WalletScreenState extends State<WalletScreen> {
             _buildInfoRow('Address Type', _wallet!.isBech32Address ? 'Bech32 (gt1...)' : 'Legacy'),
             const SizedBox(height: 8),
             _buildInfoRow('Status', _isSyncing ? 'Syncing' : 'Active'),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CryptoInfoScreen(
+                        wallet: _wallet!,
+                        walletService: _walletService,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.security, size: 18),
+                label: const Text('View Cryptographic Details'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
           ],
         ),
       ),

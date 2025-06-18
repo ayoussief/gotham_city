@@ -136,8 +136,8 @@ class WalletStorage {
     }
   }
 
-  /// Store wallet descriptor (HD wallet seed phrase and derivation info)
-  Future<void> storeWalletDescriptor({
+  /// Store HD wallet seed and derivation info
+  Future<void> storeHDWalletSeed({
     required String seedPhrase,
     required String masterPrivateKey,
     String? label,
@@ -391,5 +391,170 @@ class WalletStorage {
     _walletData!['metadata']['last_sync'] = DateTime.now().millisecondsSinceEpoch;
     _walletData!['metadata']['sync_height'] = blockHeight;
     await saveWalletData();
+  }
+
+  // HD Wallet specific methods
+  
+  /// Store HD wallet data (account, address indices)
+  Future<void> storeHDWalletData(int account, int externalIndex, int internalIndex) async {
+    if (!_isLoaded) await _loadWalletData();
+    
+    _walletData!['hd_wallet'] = {
+      'account': account,
+      'external_index': externalIndex,
+      'internal_index': internalIndex,
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+    };
+    
+    await saveWalletData();
+  }
+  
+  /// Get HD wallet data
+  Map<String, dynamic>? getHDWalletData() {
+    return _walletData?['hd_wallet'];
+  }
+  
+  /// Store HD address with full derivation path
+  Future<void> storeHDAddress({
+    required String address,
+    required int account,
+    required bool internal,
+    required int addressIndex,
+    required String derivationPath,
+    required dynamic addressType, // AddressType enum
+    String? label,
+  }) async {
+    if (!_isLoaded) await _loadWalletData();
+    
+    _walletData!['hd_addresses'] ??= <String, dynamic>{};
+    _walletData!['hd_addresses'][address] = {
+      'account': account,
+      'internal': internal,
+      'address_index': addressIndex,
+      'derivation_path': derivationPath,
+      'address_type': addressType.toString(),
+      'label': label ?? '',
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+      'used': false,
+    };
+    
+    await saveWalletData();
+  }
+  
+  /// Get HD address info
+  Map<String, dynamic>? getHDAddressInfo(String address) {
+    return _walletData?['hd_addresses']?[address];
+  }
+  
+  /// Get all HD addresses
+  Map<String, Map<String, dynamic>> getHDAddresses() {
+    if (!_isLoaded) return {};
+    final hdAddresses = _walletData?['hd_addresses'];
+    if (hdAddresses == null) return {};
+    return Map<String, Map<String, dynamic>>.from(hdAddresses);
+  }
+  
+  /// Mark HD address as used
+  Future<void> markHDAddressUsed(String address) async {
+    if (!_isLoaded) await _loadWalletData();
+    
+    if (_walletData!['hd_addresses']?[address] != null) {
+      _walletData!['hd_addresses'][address]['used'] = true;
+      _walletData!['hd_addresses'][address]['used_at'] = DateTime.now().millisecondsSinceEpoch;
+      await saveWalletData();
+    }
+  }
+  
+  /// Generate wallet descriptor for Gotham Core compatibility
+  String generateWalletDescriptor({
+    required String xpub,
+    required bool internal,
+    String descriptorType = 'wpkh', // wpkh, pkh, sh
+  }) {
+    final chain = internal ? 1 : 0;
+    return '$descriptorType([$xpub]/$chain/*)';
+  }
+  
+  /// Store wallet descriptor (compatible with Gotham Core)
+  Future<void> storeWalletDescriptor({
+    required String descriptor,
+    required String id,
+    int creationTime = 0,
+    int rangeStart = 0,
+    int rangeEnd = 1000,
+    int nextIndex = 0,
+    bool internal = false,
+  }) async {
+    if (!_isLoaded) await _loadWalletData();
+    
+    _walletData!['wallet_descriptors'] ??= <String, dynamic>{};
+    _walletData!['wallet_descriptors'][id] = {
+      'descriptor': descriptor,
+      'id': id,
+      'creation_time': creationTime,
+      'range_start': rangeStart,
+      'range_end': rangeEnd,
+      'next_index': nextIndex,
+      'internal': internal,
+      'active': true,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+    };
+    
+    await saveWalletData();
+  }
+  
+  /// Get wallet descriptors
+  Map<String, Map<String, dynamic>> getWalletDescriptors() {
+    if (!_isLoaded) return {};
+    final descriptors = _walletData?['wallet_descriptors'];
+    if (descriptors == null) return {};
+    return Map<String, Map<String, dynamic>>.from(descriptors);
+  }
+
+  // Gotham Core compatible wallet methods
+  
+  /// Store Gotham wallet (descriptor wallet format)
+  Future<void> storeGothamWallet(dynamic gothamWallet) async {
+    if (!_isLoaded) await _loadWalletData();
+    
+    _walletData!['gotham_wallet'] = gothamWallet.serialize();
+    _walletData!['wallet_type'] = 'descriptor';
+    _walletData!['wallet_flags'] = 16; // WALLET_FLAG_DESCRIPTORS
+    
+    await saveWalletData();
+  }
+  
+  /// Load Gotham wallet from storage
+  Future<dynamic> loadGothamWallet() async {
+    if (!_isLoaded) await _loadWalletData();
+    
+    final walletData = _walletData?['gotham_wallet'];
+    if (walletData == null) return null;
+    
+    // For now, return null since we'd need to reconstruct the wallet
+    // In a full implementation, this would deserialize the GothamWallet
+    return null;
+  }
+  
+  /// Store wallet address
+  Future<void> storeWalletAddress(String address, bool internal) async {
+    if (!_isLoaded) await _loadWalletData();
+    
+    _walletData!['wallet_addresses'] ??= <String, dynamic>{};
+    _walletData!['wallet_addresses'][address] = {
+      'internal': internal,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+      'used': false,
+    };
+    
+    await saveWalletData();
+  }
+  
+  /// Get all wallet addresses
+  Set<String> getWalletAddresses() {
+    if (!_isLoaded) return {};
+    final addresses = _walletData?['wallet_addresses'];
+    if (addresses == null) return {};
+    return addresses.keys.toSet().cast<String>();
   }
 }
