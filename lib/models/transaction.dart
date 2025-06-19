@@ -1,3 +1,5 @@
+import '../gotham_node/consensus/amount.dart';
+
 enum TransactionType {
   sent,
   received,
@@ -14,8 +16,8 @@ enum TransactionStatus {
 
 class Transaction {
   final String txid;
-  final double amount;
-  final double fee;
+  final GAmount amount;
+  final GAmount fee;
   final int confirmations;
   final DateTime timestamp;
   final TransactionType type;
@@ -45,7 +47,8 @@ class Transaction {
 
   Transaction copyWith({
     String? txid,
-    double? amount,
+    GAmount? amount,
+    GAmount? fee,
     TransactionType? type,
     TransactionStatus? status,
     DateTime? timestamp,

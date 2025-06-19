@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
-import 'package:sqflite_common_ffi/sqflite_common_ffi.dart';
 import 'package:path/path.dart';
 import '../models/block_header.dart';
+import 'database_helper.dart';
 
 /// Consolidated database service with cross-platform support
 class DatabaseService {
@@ -19,12 +19,7 @@ class DatabaseService {
     if (_initialized) return;
 
     // Initialize database factory for desktop platforms
-    if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
-      // Initialize FFI
-      sqfliteFfiInit();
-      // Change the default factory
-      databaseFactory = databaseFactoryFfi;
-    }
+    DatabaseHelper.initializeDatabaseFactory();
     
     _initialized = true;
   }

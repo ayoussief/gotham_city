@@ -1,6 +1,8 @@
+import '../gotham_node/consensus/amount.dart';
+
 class Wallet {
   final String address;
-  final double balance;
+  final GAmount balance;
   final String privateKey;
   final bool isImported;
   final String? seedPhrase;
@@ -19,7 +21,7 @@ class Wallet {
 
   Wallet copyWith({
     String? address,
-    double? balance,
+    GAmount? balance,
     String? privateKey,
     bool? isImported,
     String? seedPhrase,

@@ -112,6 +112,12 @@ class CTxIn {
        nSequence = nSequence ?? sequenceFinal,
        scriptWitness = scriptWitness ?? CScriptWitness();
   
+  /// Get previous transaction ID as hex string
+  String get previousTxid => prevout.hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  
+  /// Get output index
+  int get outputIndex => prevout.n;
+  
   @override
   bool operator ==(Object other) {
     if (other is! CTxIn) return false;
@@ -153,6 +159,9 @@ class CTxOut {
   }
   
   bool isNull() => nValue == -1;
+  
+  /// Get value (alias for nValue)
+  int get value => nValue;
   
   @override
   bool operator ==(Object other) {
@@ -315,6 +324,18 @@ class CTransaction {
   
   /// Get witness hash as hex string
   String get witnessHashHex => _witnessHash.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  
+  /// Get transaction ID (alias for hashHex)
+  String get txid => hashHex;
+  
+  /// Get inputs (alias for vin)
+  List<CTxIn> get inputs => vin;
+  
+  /// Get outputs (alias for vout)
+  List<CTxOut> get outputs => vout;
+  
+  /// Get lock time (alias for nLockTime)
+  int get lockTime => nLockTime;
   
   /// Check if transaction has witness data
   bool hasWitness() => _hasWitness;

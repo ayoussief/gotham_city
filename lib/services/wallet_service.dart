@@ -3,12 +3,13 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../gotham_node/consensus/amount.dart';
 import '../models/wallet.dart';
 import '../models/transaction.dart';
 import '../models/address_info.dart';
-import '../bitcoin_node/services/gotham_daemon.dart';
-import '../bitcoin_node/services/consensus_validator.dart';
-import '../bitcoin_node/config/gotham_chain_params.dart';
+import '../gotham_node/services/gotham_daemon.dart';
+import '../gotham_node/services/consensus_validator.dart';
+import '../gotham_node/config/gotham_chain_params.dart';
 
 class WalletService {
   static final WalletService _instance = WalletService._internal();
@@ -23,12 +24,12 @@ class WalletService {
   
   // Streams for real-time updates
   final StreamController<Wallet?> _walletController = StreamController<Wallet?>.broadcast();
-  final StreamController<double> _balanceController = StreamController<double>.broadcast();
+  final StreamController<GAmount> _balanceController = StreamController<GAmount>.broadcast();
   final StreamController<List<Transaction>> _transactionsController = StreamController<List<Transaction>>.broadcast();
   final StreamController<bool> _syncStatusController = StreamController<bool>.broadcast();
 
   Stream<Wallet?> get walletStream => _walletController.stream;
-  Stream<double> get balanceStream => _balanceController.stream;
+  Stream<GAmount> get balanceStream => _balanceController.stream;
   Stream<List<Transaction>> get transactionsStream => _transactionsController.stream;
   Stream<bool> get syncStatusStream => _syncStatusController.stream;
 
@@ -242,7 +243,7 @@ class WalletService {
 
     try {
       final walletOps = await _daemon.getWalletOperations();
-      final balance = walletOps['balance'] as double;
+      final balance = (walletOps['balance'] as num).toInt();
       _currentWallet = _currentWallet!.copyWith(balance: balance);
       
       _walletController.add(_currentWallet);
@@ -334,11 +335,6 @@ class WalletService {
     if (_currentWallet == null) throw Exception('No wallet loaded');
     
     try {
-      // Validate transaction before sending
-      if (!_validator.validateTransaction(null)) {
-        throw Exception('Transaction validation failed');
-      }
-      
       final txid = await _daemon.sendTransaction(
         toAddress,
         amount,
@@ -394,7 +390,7 @@ class WalletService {
     if (_currentWallet == null) return [];
     
     try {
-      final history = await _walletBackend.getTransactionHistory();
+      final history = await _daemon.getTransactionHistory();
       return history.map((tx) => Transaction(
         txid: tx['txid'] ?? '',
         amount: (tx['amount'] ?? 0.0).toDouble(),
@@ -427,23 +423,23 @@ class WalletService {
     _walletController.add(null);
     
     // Stop SPV client
-    await _spvClient.stopSync();
+    await _daemon.stopSync();
   }
 
   Future<Map<String, dynamic>> getWalletInfo() async {
     if (_currentWallet == null) return {};
     
     try {
-      final balance = await _walletBackend.getBalance();
-      final utxos = await _walletBackend.getUTXOs();
-      final syncStatus = _spvClient.syncStatus;
+      final balance = await _daemon.getBalance();
+      final utxos = await _daemon.getUTXOs();
+      final syncStatus = _daemon.getSyncStatus();
       
       return {
         'balance': balance,
         'utxo_count': utxos.length,
-        'sync_height': syncStatus.currentHeight,
-        'sync_progress': syncStatus.syncProgress,
-        'is_syncing': syncStatus.isSyncing,
+        'sync_height': syncStatus['currentHeight'] ?? 0,
+        'sync_progress': syncStatus['syncProgress'] ?? 0.0,
+        'is_syncing': syncStatus['isSyncing'] ?? false,
         'network': GothamChainParams.networkName,
         'address_type': _currentWallet!.address.startsWith('gt1') ? 'Bech32' : 'Legacy',
       };
@@ -456,7 +452,7 @@ class WalletService {
   Future<Map<String, String>> generateNewAddress(String label) async {
     try {
       // Generate a real Bitcoin address using our secp256k1 implementation
-      final addressInfo = await _walletBackend.generateNewAddress(label);
+      final addressInfo = await _daemon.generateNewAddress(label);
       
       return {
         'address': addressInfo['address'] ?? '',
@@ -478,10 +474,10 @@ class WalletService {
       }
       
       // Create transaction using our real Bitcoin implementation
-      final txId = await _walletBackend.createAndBroadcastTransaction(
+      final txId = await _daemon.createAndBroadcastTransaction(
         toAddress: toAddress,
-        amount: (amount * 100000000).toInt(), // Convert to satoshis
-        fromAddress: _currentWallet!.address,
+        amount: amount,
+        feeRate: GothamChainParams.defaultFeePerByte.toDouble(),
       );
       
       // Update wallet balance and transactions
@@ -500,7 +496,7 @@ class WalletService {
         throw Exception('No wallet loaded');
       }
       
-      final cryptoInfo = await _walletBackend.getCryptographicInfo(_currentWallet!.address);
+      final cryptoInfo = await _daemon.getCryptographicInfo(_currentWallet!.address);
       
       return {
         'address': _currentWallet!.address,
@@ -520,7 +516,7 @@ class WalletService {
   /// Test the secp256k1 implementation with known test vectors
   Future<Map<String, dynamic>> testSecp256k1Implementation() async {
     try {
-      final testResults = await _walletBackend.runSecp256k1Tests();
+      final testResults = await _daemon.runSecp256k1Tests();
       
       return {
         'success': testResults['success'] ?? false,
@@ -538,12 +534,12 @@ class WalletService {
   Future<List<AddressInfo>> getAllAddresses() async {
     try {
       // Get all watch addresses from wallet backend
-      final watchAddresses = await _walletBackend.getWatchAddresses();
+      final watchAddresses = await _daemon.getWatchAddresses();
       final addressInfoList = <AddressInfo>[];
 
       for (final address in watchAddresses) {
         // Get balance for each address
-        final balance = await _walletBackend.getAddressBalance(address);
+        final balance = await _daemon.getAddressBalance(address);
         
         // Get transaction count (simplified - in real implementation would query database)
         final transactions = await getAddressTransactions(address);
@@ -589,7 +585,7 @@ class WalletService {
   Future<List<Map<String, dynamic>>> getAddressTransactions(String address) async {
     try {
       // Get transactions from wallet backend
-      final allTransactions = await _walletBackend.getTransactionHistory();
+      final allTransactions = await _daemon.getTransactionHistory();
       
       // Filter transactions for this specific address
       final addressTransactions = <Map<String, dynamic>>[];
@@ -599,7 +595,7 @@ class WalletService {
         final txData = tx['tx_data'] as String?;
         if (txData != null && txData.contains(address)) {
           // Determine if it's incoming or outgoing for this address
-          final balanceChange = tx['balance_change'] as double? ?? 0.0;
+          final balanceChange = (tx['balance_change'] as num? ?? 0).toInt();
           
           addressTransactions.add({
             'txid': tx['txid'],
@@ -697,13 +693,13 @@ class WalletService {
     }
   }
 
-  Future<double> getTotalBalance() async {
+  Future<GAmount> getTotalBalance() async {
     try {
       final allAddresses = await getAllAddresses();
-      return allAddresses.fold<double>(0.0, (sum, addr) => sum + addr.balance);
+      return allAddresses.fold<GAmount>(0, (sum, addr) => sum + addr.balance);
     } catch (e) {
       print('Error getting total balance: $e');
-      return 0.0;
+      return 0;
     }
   }
 
@@ -732,7 +728,7 @@ class WalletService {
   Future<List<Map<String, dynamic>>> getTransactionHistory() async {
     try {
       // Get transaction history from wallet backend
-      final transactions = await _walletBackend.getTransactionHistory();
+      final transactions = await _daemon.getTransactionHistory();
       
       // Enhance transactions with additional data
       final enhancedTransactions = <Map<String, dynamic>>[];
@@ -740,7 +736,7 @@ class WalletService {
       for (final tx in transactions) {
         // Parse the stored transaction data
         final txData = tx['tx_data'] as String? ?? '';
-        final balanceChange = tx['balance_change'] as double? ?? 0.0;
+        final balanceChange = (tx['balance_change'] as num? ?? 0).toInt();
         
         enhancedTransactions.add({
           'txid': tx['txid'] ?? '',

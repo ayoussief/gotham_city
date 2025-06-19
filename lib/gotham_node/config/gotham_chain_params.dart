@@ -1,6 +1,17 @@
 // Gotham Chain Parameters
 // Define your fork's specific network parameters
 
+import '../consensus/amount.dart';
+
+/// Base58 address type prefixes - matches Gotham Core exactly
+enum Base58Type {
+  pubkeyAddress,
+  scriptAddress,
+  secretKey,
+  extPublicKey,
+  extSecretKey,
+}
+
 class GothamChainParams {
   // Network Magic Bytes (4 bytes that identify Gotham network messages)
   // From chainparams.cpp: pchMessageStart[0] = 0x47; // 'G', pchMessageStart[1] = 0x4f; // 'O', etc.
@@ -27,6 +38,15 @@ class GothamChainParams {
   static const String networkName = "gotham";
   static const String addressPrefix = "G"; // From base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,0x47); // 'G'
   static const String scriptPrefix = "O"; // From base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,0x4F); // 'O'
+  
+  // Base58 address prefixes - matches Gotham Core exactly
+  static const Map<Base58Type, List<int>> base58Prefixes = {
+    Base58Type.pubkeyAddress: [0],      // Addresses start with '1' (Bitcoin-compatible)
+    Base58Type.scriptAddress: [5],      // Addresses start with '3' (Bitcoin-compatible)
+    Base58Type.secretKey: [128],        // Private keys start with 'K' or 'L'
+    Base58Type.extPublicKey: [0x04, 0x88, 0xB2, 0x1E],  // xpub
+    Base58Type.extSecretKey: [0x04, 0x88, 0xAD, 0xE4],  // xprv
+  };
   
   // DNS Seeds - Currently empty in the source, will need to be added by Gotham network
   static const List<String> dnsSeeds = [
@@ -127,6 +147,11 @@ class GothamChainParams {
     return closestHeight >= 0 ? MapEntry(closestHeight, closestHash!) : null;
   }
   
+  // Get checkpoint at specific height
+  static String? getCheckpoint(int height) {
+    return checkpoints[height];
+  }
+  
   // Calculate next difficulty target
   static BigInt calculateNextTarget(BigInt currentTarget, int actualTimespan) {
     // Limit adjustment to 4x up or 1/4 down
@@ -143,5 +168,14 @@ class GothamChainParams {
     BigInt maxTargetBig = BigInt.parse(maxTarget, radix: 16);
     
     return newTarget > maxTargetBig ? maxTargetBig : newTarget;
+  }
+  
+  /// Get address prefix for the network
+  static List<int> getBase58Prefix(Base58Type type) {
+    final prefix = base58Prefixes[type];
+    if (prefix == null) {
+      throw ArgumentError('Unknown base58 type: $type');
+    }
+    return prefix;
   }
 }

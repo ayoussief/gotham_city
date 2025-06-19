@@ -448,6 +448,17 @@ class SPVSyncStatus {
     required this.filtersDownloaded,
   });
   
+  Map<String, dynamic> toMap() {
+    return {
+      'isConnected': isConnected,
+      'isSyncing': isSyncing,
+      'currentHeight': currentHeight,
+      'targetHeight': targetHeight,
+      'syncProgress': syncProgress,
+      'filtersDownloaded': filtersDownloaded,
+    };
+  }
+  
   @override
   String toString() {
     return 'SPVSyncStatus(connected: $isConnected, syncing: $isSyncing, progress: ${(syncProgress * 100).toStringAsFixed(1)}%)';

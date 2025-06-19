@@ -81,8 +81,6 @@ class _NodeStatusScreenState extends State<NodeStatusScreen> {
   }
 
   Future<void> _loadData() async {
-    if (_isLoading) return;
-    
     setState(() {
       _isLoading = true;
     });

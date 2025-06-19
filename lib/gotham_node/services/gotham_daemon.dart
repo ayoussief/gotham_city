@@ -239,6 +239,102 @@ class GothamDaemon {
     };
   }
   
+  /// Get transaction history
+  Future<List<Map<String, dynamic>>> getTransactionHistory() async {
+    if (!_isRunning) {
+      throw StateError('Daemon not running');
+    }
+    return await _walletBackend.getTransactionHistory();
+  }
+  
+  /// Get balance
+  Future<double> getBalance() async {
+    if (!_isRunning) {
+      throw StateError('Daemon not running');
+    }
+    return await _walletBackend.getBalance();
+  }
+  
+  /// Get UTXOs
+  Future<List<Map<String, dynamic>>> getUTXOs() async {
+    if (!_isRunning) {
+      throw StateError('Daemon not running');
+    }
+    return await _walletBackend.getUTXOs();
+  }
+  
+  /// Get sync status
+  Map<String, dynamic> getSyncStatus() {
+    return _spvClient.syncStatus.toMap();
+  }
+  
+  /// Stop sync
+  Future<void> stopSync() async {
+    if (!_isRunning) return;
+    await _spvClient.stopSync();
+  }
+  
+  /// Generate new address
+  Future<Map<String, dynamic>> generateNewAddress(String label) async {
+    if (!_isRunning) {
+      throw StateError('Daemon not running');
+    }
+    return await _walletBackend.generateNewAddress(label);
+  }
+  
+  /// Create and broadcast transaction
+  Future<String> createAndBroadcastTransaction({
+    required String toAddress,
+    required double amount,
+    required double feeRate,
+    String? memo,
+  }) async {
+    if (!_isRunning) {
+      throw StateError('Daemon not running');
+    }
+    
+    // Get current wallet address (simplified - in real implementation would get from wallet)
+    final fromAddress = 'gt1qexampleaddress'; // This should come from the actual wallet
+    
+    return await _walletBackend.createAndBroadcastTransaction(
+      toAddress: toAddress,
+      amount: (amount * 100000000).toInt(), // Convert to satoshis
+      fromAddress: fromAddress,
+    );
+  }
+  
+  /// Get cryptographic info
+  Future<Map<String, dynamic>> getCryptographicInfo(String address) async {
+    if (!_isRunning) {
+      throw StateError('Daemon not running');
+    }
+    return await _walletBackend.getCryptographicInfo(address);
+  }
+  
+  /// Run secp256k1 tests
+  Future<Map<String, dynamic>> runSecp256k1Tests() async {
+    if (!_isRunning) {
+      throw StateError('Daemon not running');
+    }
+    return await _walletBackend.runSecp256k1Tests();
+  }
+  
+  /// Get watch addresses
+  Future<List<String>> getWatchAddresses() async {
+    if (!_isRunning) {
+      throw StateError('Daemon not running');
+    }
+    return await _walletBackend.getWatchAddresses();
+  }
+  
+  /// Get address balance
+  Future<double> getAddressBalance(String address) async {
+    if (!_isRunning) {
+      throw StateError('Daemon not running');
+    }
+    return await _walletBackend.getAddressBalance(address);
+  }
+  
   /// Send transaction (called from Flutter send button)
   Future<String> sendTransaction(String toAddress, double amount, double feeRate) async {
     if (!_isRunning) {
@@ -267,6 +363,25 @@ class GothamDaemon {
       
     } catch (e) {
       _log('❌ Failed to send transaction: $e');
+      rethrow;
+    }
+  }
+  
+  /// Estimate transaction fee
+  Future<double> estimateFee({
+    required String toAddress,
+    required double amount,
+    double? feeRate,
+  }) async {
+    if (!_isRunning) {
+      throw StateError('Daemon not running');
+    }
+    
+    try {
+      // Use wallet backend to estimate fee
+      return await _walletBackend.estimateFee(toAddress, amount, feeRate);
+    } catch (e) {
+      _log('❌ Failed to estimate fee: $e');
       rethrow;
     }
   }

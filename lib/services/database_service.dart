@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/block_header.dart';
@@ -62,6 +63,89 @@ class DatabaseService {
     await db.execute('''
       CREATE INDEX idx_block_headers_created_at ON block_headers(created_at)
     ''');
+
+    // Wallets table - Based on Gotham Core wallet structure
+    await db.execute('''
+      CREATE TABLE wallets (
+        name TEXT PRIMARY KEY,
+        description TEXT,
+        is_encrypted INTEGER DEFAULT 0,
+        is_watch_only INTEGER DEFAULT 0,
+        is_hd INTEGER DEFAULT 1,
+        seed_phrase TEXT,
+        created_at INTEGER NOT NULL,
+        last_used INTEGER,
+        network TEXT DEFAULT 'main',
+        version INTEGER DEFAULT 1,
+        metadata TEXT,
+        total_balance INTEGER DEFAULT 0,
+        confirmed_balance INTEGER DEFAULT 0,
+        unconfirmed_balance INTEGER DEFAULT 0,
+        immature_balance INTEGER DEFAULT 0,
+        address_count INTEGER DEFAULT 0,
+        used_address_count INTEGER DEFAULT 0,
+        change_address_count INTEGER DEFAULT 0,
+        transaction_count INTEGER DEFAULT 0,
+        last_transaction_time INTEGER
+      )
+    ''');
+
+    // Addresses table - Individual addresses within wallets
+    await db.execute('''
+      CREATE TABLE addresses (
+        address TEXT PRIMARY KEY,
+        wallet_name TEXT NOT NULL,
+        balance INTEGER DEFAULT 0,
+        confirmed_balance INTEGER DEFAULT 0,
+        unconfirmed_balance INTEGER DEFAULT 0,
+        label TEXT,
+        is_change INTEGER DEFAULT 0,
+        is_internal INTEGER DEFAULT 0,
+        transaction_count INTEGER DEFAULT 0,
+        created_at INTEGER,
+        last_used INTEGER,
+        public_key TEXT,
+        private_key TEXT,
+        derivation_index INTEGER DEFAULT 0,
+        derivation_path TEXT DEFAULT '',
+        address_type TEXT NOT NULL,
+        is_watch_only INTEGER DEFAULT 0,
+        metadata TEXT,
+        FOREIGN KEY (wallet_name) REFERENCES wallets (name) ON DELETE CASCADE
+      )
+    ''');
+
+    // Transactions table - Transaction records for wallets
+    await db.execute('''
+      CREATE TABLE transactions (
+        txid TEXT PRIMARY KEY,
+        wallet_name TEXT NOT NULL,
+        block_hash TEXT,
+        block_height INTEGER,
+        timestamp INTEGER NOT NULL,
+        amount INTEGER NOT NULL,
+        fee INTEGER DEFAULT 0,
+        confirmations INTEGER DEFAULT 0,
+        is_coinbase INTEGER DEFAULT 0,
+        category TEXT NOT NULL,
+        address TEXT,
+        label TEXT,
+        raw_transaction TEXT,
+        metadata TEXT,
+        FOREIGN KEY (wallet_name) REFERENCES wallets (name) ON DELETE CASCADE
+      )
+    ''');
+
+    // Create indexes for better performance
+    await db.execute('CREATE INDEX idx_addresses_wallet ON addresses(wallet_name)');
+    await db.execute('CREATE INDEX idx_addresses_balance ON addresses(balance)');
+    await db.execute('CREATE INDEX idx_addresses_is_change ON addresses(is_change)');
+    await db.execute('CREATE INDEX idx_addresses_derivation_index ON addresses(derivation_index)');
+    
+    await db.execute('CREATE INDEX idx_transactions_wallet ON transactions(wallet_name)');
+    await db.execute('CREATE INDEX idx_transactions_timestamp ON transactions(timestamp)');
+    await db.execute('CREATE INDEX idx_transactions_block_height ON transactions(block_height)');
+    await db.execute('CREATE INDEX idx_transactions_address ON transactions(address)');
 
     // Node settings table
     await db.execute('''
@@ -321,6 +405,283 @@ class DatabaseService {
       'database_size_mb': (dbSize / (1024 * 1024)).toStringAsFixed(2),
       'peers_count': peersCount,
     };
+  }
+
+  // Wallet operations
+  Future<void> saveWallet(Map<String, dynamic> walletData) async {
+    final db = await database;
+    
+    // Convert boolean fields to integers for SQLite
+    final data = Map<String, dynamic>.from(walletData);
+    data['is_encrypted'] = (data['isEncrypted'] ?? false) ? 1 : 0;
+    data['is_watch_only'] = (data['isWatchOnly'] ?? false) ? 1 : 0;
+    data['is_hd'] = (data['isHD'] ?? true) ? 1 : 0;
+    
+    // Convert metadata to JSON string if it exists
+    if (data['metadata'] != null) {
+      data['metadata'] = jsonEncode(data['metadata']);
+    }
+    
+    // Remove Flutter-style keys and use database column names
+    data.remove('isEncrypted');
+    data.remove('isWatchOnly');
+    data.remove('isHD');
+    
+    await db.insert(
+      'wallets',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getWallets() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'wallets',
+      orderBy: 'last_used DESC, created_at DESC',
+    );
+
+    // Convert database format back to Flutter format
+    return maps.map((map) {
+      final data = Map<String, dynamic>.from(map);
+      data['isEncrypted'] = (data['is_encrypted'] ?? 0) == 1;
+      data['isWatchOnly'] = (data['is_watch_only'] ?? 0) == 1;
+      data['isHD'] = (data['is_hd'] ?? 1) == 1;
+      
+      // Parse metadata JSON if it exists
+      if (data['metadata'] != null && data['metadata'] is String) {
+        try {
+          data['metadata'] = jsonDecode(data['metadata']);
+        } catch (e) {
+          data['metadata'] = null;
+        }
+      }
+      
+      // Remove database-style keys
+      data.remove('is_encrypted');
+      data.remove('is_watch_only');
+      data.remove('is_hd');
+      
+      return data;
+    }).toList();
+  }
+
+  Future<Map<String, dynamic>?> getWallet(String name) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'wallets',
+      where: 'name = ?',
+      whereArgs: [name],
+    );
+
+    if (maps.isNotEmpty) {
+      final data = Map<String, dynamic>.from(maps.first);
+      data['isEncrypted'] = (data['is_encrypted'] ?? 0) == 1;
+      data['isWatchOnly'] = (data['is_watch_only'] ?? 0) == 1;
+      data['isHD'] = (data['is_hd'] ?? 1) == 1;
+      
+      if (data['metadata'] != null && data['metadata'] is String) {
+        try {
+          data['metadata'] = jsonDecode(data['metadata']);
+        } catch (e) {
+          data['metadata'] = null;
+        }
+      }
+      
+      data.remove('is_encrypted');
+      data.remove('is_watch_only');
+      data.remove('is_hd');
+      
+      return data;
+    }
+    return null;
+  }
+
+  Future<void> deleteWallet(String name) async {
+    final db = await database;
+    await db.delete(
+      'wallets',
+      where: 'name = ?',
+      whereArgs: [name],
+    );
+    // Addresses and transactions will be deleted automatically due to CASCADE
+  }
+
+  // Address operations
+  Future<void> saveAddress(Map<String, dynamic> addressData) async {
+    final db = await database;
+    
+    // Convert boolean fields to integers for SQLite
+    final data = Map<String, dynamic>.from(addressData);
+    data['is_change'] = (data['isChange'] ?? false) ? 1 : 0;
+    data['is_internal'] = (data['isInternal'] ?? false) ? 1 : 0;
+    data['is_watch_only'] = (data['isWatchOnly'] ?? false) ? 1 : 0;
+    
+    // Convert metadata to JSON string if it exists
+    if (data['metadata'] != null) {
+      data['metadata'] = jsonEncode(data['metadata']);
+    }
+    
+    // Remove Flutter-style keys
+    data.remove('isChange');
+    data.remove('isInternal');
+    data.remove('isWatchOnly');
+    
+    await db.insert(
+      'addresses',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getAddressesForWallet(String walletName) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'addresses',
+      where: 'wallet_name = ?',
+      whereArgs: [walletName],
+      orderBy: 'is_change ASC, derivation_index ASC',
+    );
+
+    // Convert database format back to Flutter format
+    return maps.map((map) {
+      final data = Map<String, dynamic>.from(map);
+      data['isChange'] = (data['is_change'] ?? 0) == 1;
+      data['isInternal'] = (data['is_internal'] ?? 0) == 1;
+      data['isWatchOnly'] = (data['is_watch_only'] ?? 0) == 1;
+      
+      // Parse metadata JSON if it exists
+      if (data['metadata'] != null && data['metadata'] is String) {
+        try {
+          data['metadata'] = jsonDecode(data['metadata']);
+        } catch (e) {
+          data['metadata'] = null;
+        }
+      }
+      
+      // Remove database-style keys
+      data.remove('is_change');
+      data.remove('is_internal');
+      data.remove('is_watch_only');
+      
+      return data;
+    }).toList();
+  }
+
+  Future<Map<String, dynamic>?> getAddress(String address) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'addresses',
+      where: 'address = ?',
+      whereArgs: [address],
+    );
+
+    if (maps.isNotEmpty) {
+      final data = Map<String, dynamic>.from(maps.first);
+      data['isChange'] = (data['is_change'] ?? 0) == 1;
+      data['isInternal'] = (data['is_internal'] ?? 0) == 1;
+      data['isWatchOnly'] = (data['is_watch_only'] ?? 0) == 1;
+      
+      if (data['metadata'] != null && data['metadata'] is String) {
+        try {
+          data['metadata'] = jsonDecode(data['metadata']);
+        } catch (e) {
+          data['metadata'] = null;
+        }
+      }
+      
+      data.remove('is_change');
+      data.remove('is_internal');
+      data.remove('is_watch_only');
+      
+      return data;
+    }
+    return null;
+  }
+
+  // Transaction operations
+  Future<void> saveTransaction(Map<String, dynamic> transactionData) async {
+    final db = await database;
+    
+    // Convert boolean fields to integers for SQLite
+    final data = Map<String, dynamic>.from(transactionData);
+    data['is_coinbase'] = (data['isCoinbase'] ?? false) ? 1 : 0;
+    
+    // Convert metadata to JSON string if it exists
+    if (data['metadata'] != null) {
+      data['metadata'] = jsonEncode(data['metadata']);
+    }
+    
+    // Remove Flutter-style keys
+    data.remove('isCoinbase');
+    
+    await db.insert(
+      'transactions',
+      data,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getTransactionsForWallet(String walletName) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'transactions',
+      where: 'wallet_name = ?',
+      whereArgs: [walletName],
+      orderBy: 'timestamp DESC',
+    );
+
+    // Convert database format back to Flutter format
+    return maps.map((map) {
+      final data = Map<String, dynamic>.from(map);
+      data['isCoinbase'] = (data['is_coinbase'] ?? 0) == 1;
+      
+      // Parse metadata JSON if it exists
+      if (data['metadata'] != null && data['metadata'] is String) {
+        try {
+          data['metadata'] = jsonDecode(data['metadata']);
+        } catch (e) {
+          data['metadata'] = null;
+        }
+      }
+      
+      // Remove database-style keys
+      data.remove('is_coinbase');
+      
+      return data;
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getTransactionsForAddress(String address) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'transactions',
+      where: 'address = ?',
+      whereArgs: [address],
+      orderBy: 'timestamp DESC',
+    );
+
+    return maps.map((map) {
+      final data = Map<String, dynamic>.from(map);
+      data['isCoinbase'] = (data['is_coinbase'] ?? 0) == 1;
+      
+      if (data['metadata'] != null && data['metadata'] is String) {
+        try {
+          data['metadata'] = jsonDecode(data['metadata']);
+        } catch (e) {
+          data['metadata'] = null;
+        }
+      }
+      
+      data.remove('is_coinbase');
+      
+      return data;
+    }).toList();
+  }
+
+  // Initialize method to ensure database is ready
+  Future<void> initialize() async {
+    await database; // This will trigger database creation if needed
   }
 
   // Close database

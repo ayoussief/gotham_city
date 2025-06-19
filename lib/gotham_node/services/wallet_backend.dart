@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import '../consensus/amount.dart';
 import 'filter_storage.dart';
 import 'wallet_storage.dart';
 import '../config/gotham_chain_params.dart';
@@ -378,7 +379,19 @@ class WalletBackend {
   }
   
   // Fee estimation
-  Future<double> estimateFee(int inputCount, int outputCount, double feeRate) async {
+  Future<double> estimateFee(String toAddress, double amount, double? feeRate) async {
+    // Estimate typical transaction size (1 input, 2 outputs)
+    final inputCount = 1;
+    final outputCount = 2; // one for recipient, one for change
+    final actualFeeRate = feeRate ?? 1.0; // default 1 sat/byte
+    
+    final txSize = _estimateTransactionSize(inputCount, outputCount);
+    final feeSatoshis = txSize * (actualFeeRate * 100000000).round();
+    return feeSatoshis / 100000000.0;
+  }
+  
+  // Fee estimation (legacy method)
+  Future<double> estimateFeeByInputOutput(int inputCount, int outputCount, double feeRate) async {
     final txSize = _estimateTransactionSize(inputCount, outputCount);
     final feeSatoshis = txSize * (feeRate * 100000000).round();
     return feeSatoshis / 100000000.0;
@@ -892,22 +905,22 @@ class WalletBackend {
   }
   
   /// Get balance with confirmations (RPC-style)
-  double getBalanceWithConfirmations({
+  GAmount getBalanceWithConfirmations({
     String? account,
     int minConfirmations = 1,
     bool includeWatchOnly = false,
   }) {
     final wallet = _getActiveWallet();
-    if (wallet == null) return 0.0;
+    if (wallet == null) return 0;
     
     final utxos = _getWalletUtxos();
-    double balance = 0.0;
+    GAmount balance = 0;
     
     for (final utxo in utxos) {
       final confirmations = _getConfirmationsForUtxo(utxo);
       
       if (confirmations >= minConfirmations) {
-        balance += utxo['amount'] as double;
+        balance += (utxo['amount'] as num).toInt();
       }
     }
     
